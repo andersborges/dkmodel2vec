@@ -2,6 +2,11 @@
 import pytest
 from llm2vec import LLM2Vec
 import torch
+from transformers import AutoTokenizer
+
+from peft import LoraConfig, TaskType, PeftModel
+
+from dkmodel2vec.llm_loader import load_base_model
 
 
 # Basic import tests (no fixtures needed)
@@ -27,14 +32,13 @@ def test_llm2vec_class_structure():
         assert hasattr(LLM2Vec, method), f"LLM2Vec should have {method} method"
 
 
-# SESSION-SCOPED FIXTURE - loads once per test session
 @pytest.fixture(scope="session")
 def tiny_llm2vec():
     """
     Load SmolLM2-135M once per test session.
     This avoids reloading the model for every test.
     """
-    print("\n🔄 Loading SmolLM2-135M (session fixture - loads once)...")
+    print("\n🔄 Loading SmolLM2-135M ...")
 
     model = LLM2Vec.from_pretrained(
         "HuggingFaceTB/SmolLM2-135M",
@@ -42,18 +46,49 @@ def tiny_llm2vec():
         torch_dtype=torch.float16,
         pooling_mode="mean",
         max_length=32,
-        enable_bidirectional=True,  # Enable bidirectional as requested
     )
 
-    print("✅ SmolLM2-135M loaded and cached for session (~135MB)")
-    print("ℹ️  Subsequent tests will reuse this model instance")
     return model
+
+
+@pytest.fixture(scope="session")
+def sample_peft_config():
+    """Create dummy peft config to test that we can load a dummy model."""
+    peft_config = LoraConfig(
+        task_type=TaskType.FEATURE_EXTRACTION,
+        inference_mode=True,
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+    )
+    return peft_config
+
+
+@pytest.fixture(scope="session")
+def tiny_fine_tuned_llm2vec_model(sample_peft_config):
+    """Test that the actual loading of a fine-tuned LLM2Vec model is succesful."""
+    tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M")
+
+    # hot-fix as LLM2vec requires a tokenizer with padding token and padding_side
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    base_model = load_base_model(base_model_name_or_path="HuggingFaceTB/SmolLM2-135M")
+    peft_model = PeftModel(model=base_model, peft_config=sample_peft_config)
+    model = peft_model.merge_and_unload()  # This can take several minutes on cpu
+
+    l2v = LLM2Vec(model=model, tokenizer=tokenizer, pooling_mode="mean")
+    return l2v
 
 
 @pytest.fixture
 def sample_texts():
     """Short test texts."""
     return ["Hi", "Hello", "Test"]
+
+
+def test_sample_peft_config(sample_peft_config):
+    assert sample_peft_config is not None
 
 
 # Tests using the cached model fixture
@@ -63,9 +98,16 @@ def test_llm2vec_model_loads(tiny_llm2vec):
     assert hasattr(tiny_llm2vec, "encode")
 
 
-def test_llm2vec_encode_texts(tiny_llm2vec, sample_texts):
+# Tests using the cached model fixture
+def test_fine_tuned_llm2vec_model_loads(tiny_fine_tuned_llm2vec_model):
+    """Test that the model loads successfully (uses cached model)."""
+    assert tiny_fine_tuned_llm2vec_model is not None
+    assert hasattr(tiny_fine_tuned_llm2vec_model, "encode")
+
+
+def test_llm2vec_encode_texts(tiny_fine_tuned_llm2vec_model, sample_texts):
     """Test encoding one text (uses cached model)."""
-    embeddings = tiny_llm2vec.encode(sample_texts)
+    embeddings = tiny_fine_tuned_llm2vec_model.encode(sample_texts)
 
     assert embeddings is not None
     assert len(embeddings) == len(sample_texts)

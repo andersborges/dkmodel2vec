@@ -12,6 +12,7 @@ dependencies = [
     "model2vec>=0.2.4",
     "nbformat>=4.2.0",
     "numpy<2",
+    "peft>=0.15.2",
     "plotly>=6.1.2",
     "pydantic>=2.11.5",
     "pytest>=8.4.0",
