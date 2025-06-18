@@ -9,7 +9,7 @@ dependencies = [
     "datasets>=3.6.0",
     "ipykernel>=6.29.5",
     "llm2vec>=0.2.3",
-    "model2vec>=0.2.4",
+    "model2vec[training]>=0.2.4",
     "nbformat>=4.2.0",
     "numpy<2",
     "peft>=0.15.2",
@@ -18,6 +18,4 @@ dependencies = [
     "pytest>=8.4.0",
     "ruff>=0.11.13",
     "torch==2.2.2",
-    "torchaudio==2.2.2",
-    "torchvision==0.17.2",
 ]
