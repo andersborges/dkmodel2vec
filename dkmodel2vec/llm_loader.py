@@ -30,30 +30,6 @@ def merge_LoRA_weights_into_model(
     model = model.merge_and_unload()  # This can take several minutes on cpu
     return model
 
-
-def add_device_property_if_missing(module):
-    """
-    Add a device property to a PyTorch module if it doesn't already have one.
-
-    This is useful for older PyTorch versions or custom modules that don't
-    properly expose the device property.
-
-    Args:
-        module: A PyTorch module (nn.Module instance)
-    """
-    if not hasattr(module, "device"):
-
-        def get_device(self):
-            try:
-                return next(self.parameters()).device
-            except StopIteration:
-                # If module has no parameters, default to CPU
-                return torch.device("cpu")
-
-        # Add the property to the module's class
-        module.__class__.device = property(get_device)
-
-
 def load_llm2vec_model(
     base_model_name_or_path: str | os.PathLike = "jealk/llm2vec-scandi-mntp-v2",
     supervised_model_name_or_path: str

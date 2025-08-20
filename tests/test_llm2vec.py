@@ -1,13 +1,14 @@
 # test_llm2vec_import.py
+from pathlib import Path
 import pytest
 from llm2vec import LLM2Vec
 import torch
 from transformers import AutoTokenizer
-
 from peft import LoraConfig, TaskType, PeftModel
 
-from dkmodel2vec.llm_loader import load_base_model, add_device_property_if_missing
+from dkmodel2vec.llm_loader import load_base_model
 from dkmodel2vec.models import LlamaModelWrapper
+from dkmodel2vec.distillation import distill_from_model_and_corpus
 
 # Basic import tests (no fixtures needed)
 def test_llm2vec_import():
@@ -188,5 +189,50 @@ def test_model2vec_distillation(tiny_fine_tuned_llm2vec_model, sample_texts):
     )
     embeddings = m2v_model.encode(sample_texts)
     assert embeddings.shape
+
+    models_dir = Path(__file__).parent / "models"
+    models_dir.mkdir(exist_ok=True)
+
+    model_name =  "test"
+    m2v_model.save_pretrained(models_dir / model_name)
+
+def test_adding_vocabulary(tiny_fine_tuned_llm2vec_model): 
+    from model2vec.distill import distill_from_model
+    wrapped_model = LlamaModelWrapper(tiny_fine_tuned_llm2vec_model)
+
+    vocab = ["Helloworld", "theseunique" , "tokensarenotlikely", "tobeinthestandardvocab"]
+    m2v_model = distill_from_model(
+        model=wrapped_model,
+        tokenizer=tiny_fine_tuned_llm2vec_model.tokenizer,
+        vocabulary=vocab,
+        pca_dims=256,
+        device="cpu",
+    )
+
+    embeddings = m2v_model.encode(vocab)
+
+    assert embeddings.shape[0] == len(vocab)
+    for vocab_n in vocab:
+        assert len(m2v_model.tokenize([vocab_n]) )== 1
+
+def test_custom_distillation(tiny_fine_tuned_llm2vec_model): 
+    from dkmodel2vec.distillation import distill_from_model_and_corpus
+    wrapped_model = LlamaModelWrapper(tiny_fine_tuned_llm2vec_model)
+    texts = ["This Helloworld text is quite unique.", "This text contain the 'theseunique' token"]
+    vocab = ["Helloworld", "theseunique" , "tokensarenotlikely", "tobeinthestandardvocab"]
+    m2v_model = distill_from_model_and_corpus(
+        model=wrapped_model,
+        tokenizer=tiny_fine_tuned_llm2vec_model.tokenizer,
+        vocabulary=vocab,
+        corpus = texts,
+        pca_dims=256,
+        device="cpu",
+    )
     
-    m2v_model.save_pretrained("m2v_model")
+    embeddings = m2v_model.encode(vocab)
+    assert embeddings.shape[0]
+    tokenizer = m2v_model.tokenizer
+    assert len(tokenizer.encode("Helloworld").ids) == 1
+    assert tokenizer.encode("Helloworld").ids[0] in tokenizer.encode("This Helloworld text").ids
+    assert len(tokenizer.encode("tobeinthestandardvocab2").ids) > 1
+    
