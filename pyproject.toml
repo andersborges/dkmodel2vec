@@ -9,6 +9,7 @@ dependencies = [
     "datasets>=3.6.0",
     "ipykernel>=6.29.5",
     "llm2vec==0.2.3",
+    "mlflow>=3.3.1",
     "model2vec==0.6",
     "nbformat>=4.2.0",
     "numpy<2",
@@ -16,10 +17,14 @@ dependencies = [
     "plotly>=6.1.2",
     "pydantic>=2.11.5",
     "pytest>=8.4.0",
+    "rank-bm25",
     "ruff>=0.11.13",
+    "seb",
     "torch>=2.7.1",
-    "transformers==4.46",
 ]
 [tool.setuptools.packages.find]
 where = ["."]
 exclude = ["notebooks*", "tests*"]
+
+[tool.uv.sources]
+llm2vec = { git = "https://github.com/andersborges/llm2vec.git" }
