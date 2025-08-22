@@ -41,7 +41,7 @@ def distill_from_model_and_corpus(
     a forward pass for all subword tokens in the tokenizer, or by doing a forward pass for all tokens in a passed vocabulary.
 
     If you pass through a vocabulary, we create a custom word tokenizer for that vocabulary and sort the combined internal and 
-    external tokens into a single token space sorted by frequency.  
+    external tokens into a single token space sorted by frequency. 
 
     If you don't pass a vocabulary, we use the model's tokenizer directly.
 

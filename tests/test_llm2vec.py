@@ -5,12 +5,14 @@ from llm2vec import LLM2Vec
 import torch
 from transformers import AutoTokenizer
 from peft import LoraConfig, TaskType, PeftModel
+import numpy as np 
+from datasets import Dataset
 
 from dkmodel2vec.llm_loader import load_base_model
 from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
+from model2vec import StaticModel
 
-# Basic import tests (no fixtures needed)
 def test_llm2vec_import():
     """Test that LLM2Vec class can be imported successfully."""
     try:        
@@ -236,3 +238,54 @@ def test_custom_distillation(tiny_fine_tuned_llm2vec_model):
     assert tokenizer.encode("Helloworld").ids[0] in tokenizer.encode("This Helloworld text").ids
     assert len(tokenizer.encode("tobeinthestandardvocab2").ids) > 1
     
+@pytest.fixture
+def sample_dataset():
+    """Short test examples"""
+    from datasets import Dataset, DatasetDict
+    querys = ["It's dangerous to go alone!", "I like green apples"]
+    positives = [  "Danger is imminent when solo. ","My favourite fruit is sweet and round"]
+    negatives = ["I like cats",  "Walking is slow" ]
+    languages = ["danish"] * len(querys)
+    dataset = Dataset.from_dict({"query" :querys, "positive" : positives, "negative" : negatives, "language" : languages})
+    dataset = DatasetDict({"train": dataset})
+    return dataset
+
+def test_sample_dataset(sample_dataset): 
+    assert sample_dataset['train'].num_rows > 1 
+
+@pytest.fixture
+def sample_model(fixture = "session"):
+    model = StaticModel.from_pretrained("minishlab/potion-base-8M")
+    return model 
+
+
+def test_compute_distances(sample_model, sample_dataset): 
+    from dkmodel2vec.evaluator import compute_distances
+    model = sample_model
+    dataset = sample_dataset
+    pos_dists, neg_dists = compute_distances(
+            model, 
+            dataset['train'])
+    # for the test cases, all the positive cases have shorter distances
+    assert all(pos_dists<neg_dists)
+
+def test_evaluate_classification(): 
+    from dkmodel2vec.evaluator import evaluate_classification
+    pos_distances = np.array([0, 1, 0.5])
+    neg_distances = np.array([1, 1.1, 0.2])
+    
+    results = evaluate_classification(pos_distances=pos_distances, neg_distances=neg_distances)
+    assert results['accuracy'] - 2/3.0 < 10**(-3)
+    assert results['precision'] - 1 < 10**(-3)
+    assert results['recall'] - 2/3.0 < 10**(-3)
+    assert (results['predictions'] == [1,1,0]).all()
+    assert (results['ground_truth'] == [1,1,1]).all()
+
+def test_bm25(sample_model):
+    from dkmodel2vec.evaluator import predict_bm25
+    q = "CAT"
+    pos = "CAT CAT CAT CAT "
+    neg = "This is not it here either longer text"
+    example = {"query" : q, "positive" : pos, "negative" : neg}
+    example_output = predict_bm25(example, sample_model.tokenizer)
+    assert example_output['bm25_prediction'] == 1
