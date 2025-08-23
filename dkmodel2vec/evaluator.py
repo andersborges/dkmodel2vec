@@ -107,7 +107,7 @@ def evaluate_classification(predictions: np.array, ground_truth) -> Dict:
     }
 
 def log_performance(results: dict, log_prefix: str = ""):
-
+    """Log metric, dicts and table. """
     metrics_to_log = ['accuracy', 'precision', 'recall', 'f1_score']
         
     for metric in metrics_to_log:
@@ -131,7 +131,8 @@ def log_performance(results: dict, log_prefix: str = ""):
 
     
 def evaluate_model(dataset: Dataset, model: StaticModel, max_samples: int) -> Dict:
-    """Run the complete evaluation pipeline."""
+    """Run the complete evaluation on the subset of the test set that contains both positive and negative examples."""
+    dataset = dataset.filter(lambda example: True if example['has_positive_and_negative'] else False)
     if max_samples:
         dataset = dataset.select(range(max_samples))
     # Compute similarities

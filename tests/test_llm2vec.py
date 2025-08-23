@@ -289,3 +289,15 @@ def test_bm25(sample_model):
     example = {"query" : q, "positive" : pos, "negative" : neg}
     example_output = predict_bm25(example, sample_model.tokenizer)
     assert example_output['bm25_prediction'] == 1
+
+def test_data_loader():
+    from dkmodel2vec.data_loader import load_data
+    ds = load_data()
+    assert ds.num_rows >100
+    assert True in ds['has_positive_and_negative'] and False in ds['has_positive_and_negative']
+
+def test_create_vocabulary():
+    from dkmodel2vec.vocab import create_vocabulary
+    test_input = ["I like cats", "i LIKE likE CATS caTS CAts", "dogs"]
+    vocab = create_vocabulary(test_input)
+    assert vocab == ["cats", "like", "i", "dogs" ]
