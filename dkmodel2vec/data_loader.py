@@ -34,6 +34,7 @@ def load_data():
     dsdk = ds.filter(lambda sample: True if sample["language"] == "danish" else False)
     dsdk = dsdk["train"]
     dsdk = dsdk.add_column("idx", range(len(dsdk)))
-    dsdk = dsdk.map(has_positive_and_negative)
-    dsdk = dsdk.map(get_detailed_instruct)
+    dsdk = dsdk.map(has_positive_and_negative, num_proc = 4)
+    dsdk = dsdk.map(get_detailed_instruct, num_proc = 4)
+    dsdk = dsdk.map(get_danish_detailed_instruct, num_proc = 4)
     return dsdk

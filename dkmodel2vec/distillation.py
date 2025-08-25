@@ -110,26 +110,41 @@ def distill_from_model_and_corpus(
     pad_token = cast(Optional[str], tokenizer.special_tokens_map.get("pad_token"))
 
     # Weird if to satsify mypy
+
+    if unk_token is None:
+        unk_token = cast(
+            Optional[str], [token for token in tokenizer.get_vocab() if "_" == token][0]
+        )
+        print(
+            "The unknown token is not set. Setting it to the '_' token. This is a workaround to allow encoding of more texts without error."
+        )
+        unk_token_obj = Token(
+            form="[UNK]", normalized_form="[UNK]", is_subword=False, is_internal=False
+                )
+        all_tokens = all_tokens + [unk_token_obj]
     if pad_token is None:
         if unk_token is not None:
             pad_token = unk_token
-            logger.warning(
+            print(
                 "The pad token is not set. Setting it to the unk token. This is a workaround for models that don't have a pad token."
             )
         else:
             pad_token = unk_token or all_tokens[0].form
-            logger.warning(
+            print(
                 "The pad token is not set. Setting it to the first token in the vocabulary. This is a workaround for models that don't have a pad token."
             )
 
     # Replace the vocabulary in the tokenizer with the new vocabulary to eventually hold the static embeddings
-    new_backend_tokenizer = replace_vocabulary(
-        backend_tokenizer, all_tokens, unk_token=unk_token, pad_token=pad_token
+    backend_tokenizer_replaced_vocab = replace_vocabulary(
+        backend_tokenizer,
+        all_tokens,
+        unk_token="[UNK]",
+        pad_token=pad_token,
     )
 
     if corpus is not None:
         token_counts = estimate_token_frequencies(
-            backend_tokenizer=new_backend_tokenizer,
+            backend_tokenizer=backend_tokenizer_replaced_vocab,
             corpus_texts=corpus,
             batch_size=1000,
         )
@@ -199,7 +214,7 @@ def distill_from_model_and_corpus(
 
     return StaticModel(
         vectors=embeddings,
-        tokenizer=new_backend_tokenizer,
+        tokenizer=backend_tokenizer_replaced_vocab,
         config=config,
         base_model_name=model_name,
         language=language,
