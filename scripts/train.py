@@ -21,6 +21,7 @@ if __name__ == "__main__":
     tokenizer = lower_case_tokenizer(model.tokenizer)
     wrapped_model.tokenizer = tokenizer
     # start experiment
+    mlflow.set_tracking_uri("http://localhost:8000")
     mlflow.set_experiment("llm2model2vec")
 
     dsdk = load_data()            
