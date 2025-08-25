@@ -271,10 +271,11 @@ def test_compute_distances(sample_model, sample_dataset):
 
 def test_evaluate_classification(): 
     from dkmodel2vec.evaluator import evaluate_classification
-    pos_distances = np.array([0, 1, 0.5])
-    neg_distances = np.array([1, 1.1, 0.2])
+    pos_dists = np.array([0, 1, 0.5])
+    neg_dists = np.array([1, 1.1, 0.2])
+    predictions = (pos_dists < neg_dists).astype(int)
     
-    results = evaluate_classification(pos_distances=pos_distances, neg_distances=neg_distances)
+    results = evaluate_classification(predictions=predictions, ground_truth=np.ones_like(predictions))
     assert results['accuracy'] - 2/3.0 < 10**(-3)
     assert results['precision'] - 1 < 10**(-3)
     assert results['recall'] - 2/3.0 < 10**(-3)
@@ -295,7 +296,7 @@ def test_data_loader():
     ds = load_data()
     assert ds.num_rows >100
     assert True in ds['has_positive_and_negative'] and False in ds['has_positive_and_negative']
-
+    
 def test_create_vocabulary():
     from dkmodel2vec.vocab import create_vocabulary
     test_input = ["I like cats", "i LIKE likE CATS caTS CAts", "dogs"]
