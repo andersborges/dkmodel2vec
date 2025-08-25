@@ -1,9 +1,20 @@
 from datasets import load_dataset
-from transformers import AutoTokenizer
+
+from dkmodel2vec.config import E5_EMBED_INSTRUCTION, DANISH_INSTRUCTION
 
 def has_positive_and_negative(example: dict)->dict: 
     """Flag examples which have both a positive and negative example. """
     example['has_positive_and_negative'] = example['positive'] is not None and example['negative'] is not None
+    return example
+
+def get_detailed_instruct(example: dict) -> dict:
+    """Construct instruction for embedding model."""
+    example["query_instruct"] = f"'Instruct: {E5_EMBED_INSTRUCTION}\nQuery: {example["query"]}'"
+    return example
+
+def get_danish_detailed_instruct(example: dict) -> dict:
+    """Construct instruction for embedding model in Danish."""
+    example["query_danish_instruct"] = f"{DANISH_INSTRUCTION} {example["query"]}"
     return example
 
 def load_data(): 
@@ -16,4 +27,5 @@ def load_data():
     dsdk = dsdk['train']
     dsdk = dsdk.add_column('idx', range(len(dsdk)))
     dsdk = dsdk.map(has_positive_and_negative)
+    dsdk = dsdk.map(get_detailed_instruct)
     return dsdk
