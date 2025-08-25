@@ -12,10 +12,10 @@ from dkmodel2vec.distillation import distill_from_model_and_corpus
 from dkmodel2vec.evaluator import evaluate_model
 from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
-import numpy as np 
+import numpy as np
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     model = load_llm2vec_model()
     wrapped_model = LlamaModelWrapper(model)
     tokenizer = lower_case_tokenizer(model.tokenizer)
@@ -24,48 +24,43 @@ if __name__ == "__main__":
     mlflow.set_tracking_uri("http://localhost:8000")
     mlflow.set_experiment("llm2model2vec")
 
-    dsdk = load_data()            
+    dsdk = load_data()
 
     skf = StratifiedKFold(n_splits=10)
     splits = skf.split(np.zeros(dsdk.num_rows), dsdk["has_positive_and_negative"])
 
     for fold_n, (train_idx, test_idx) in enumerate(splits):
-        with mlflow.start_run(run_name = f"fold_{fold_n}", nested = True):
+        with mlflow.start_run(run_name=f"fold_{fold_n}", nested=True):
             ds_train, ds_test = dsdk.select(train_idx), dsdk.select(test_idx)
             # Get texts from all examples in fold
-            texts = ds_train['query'] + ds_train["positive"] + ds_train['negative']    
+            texts = ds_train["query"] + ds_train["positive"] + ds_train["negative"]
             vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
             m2v_model = distill_from_model_and_corpus(
                 model=wrapped_model,
                 tokenizer=tokenizer,
                 vocabulary=vocabulary,
-                corpus = texts,
-                pca_dims=256, 
-                quantize_to="int8"
+                corpus=texts,
+                pca_dims=256,
+                quantize_to="int8",
             )
-            evaluate_model(dataset = ds_test, model = m2v_model)
+            evaluate_model(dataset=ds_test, model=m2v_model)
 
-        
     # train final model on full dataset
-    with mlflow.start_run(run_name = f"full_model"):
-
-        texts = dsdk['query'] + dsdk["positive"] + dsdk['negative']    
+    with mlflow.start_run(run_name="full_model"):
+        texts = dsdk["query"] + dsdk["positive"] + dsdk["negative"]
         vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
             tokenizer=tokenizer,
             vocabulary=vocabulary,
-            corpus = texts,
-            pca_dims=256, 
-            quantize_to="int8"
+            corpus=texts,
+            pca_dims=256,
+            quantize_to="int8",
         )
-        evaluate_model(dataset=dsdk, model = m2v_model)
-
+        evaluate_model(dataset=dsdk, model=m2v_model)
 
         models_dir = Path(__file__).parent / "models"
         models_dir.mkdir(exist_ok=True)
 
-        model_name =  "dkllm2vec2model2vec"
+        model_name = "dkllm2vec2model2vec"
         m2v_model.save_pretrained(models_dir / model_name)
-
-    

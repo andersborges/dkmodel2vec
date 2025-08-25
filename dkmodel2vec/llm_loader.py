@@ -30,6 +30,7 @@ def merge_LoRA_weights_into_model(
     model = model.merge_and_unload()  # This can take several minutes on cpu
     return model
 
+
 def load_llm2vec_model(
     base_model_name_or_path: str | os.PathLike = "jealk/llm2vec-scandi-mntp-v2",
     supervised_model_name_or_path: str

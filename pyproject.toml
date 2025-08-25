@@ -28,3 +28,8 @@ exclude = ["notebooks*", "tests*"]
 
 [tool.uv.sources]
 llm2vec = { git = "https://github.com/andersborges/llm2vec.git" }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.0",
+]

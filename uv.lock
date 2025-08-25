@@ -521,6 +521,11 @@ dependencies = [
     { name = "torch" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.7.0" },
@@ -540,6 +545,9 @@ requires-dist = [
     { name = "seb" },
     { name = "torch", specifier = ">=2.7.1" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.12.0" }]
 
 [[package]]
 name = "docker"
