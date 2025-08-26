@@ -1,3 +1,4 @@
+from copy import deepcopy
 from collections import Counter
 from dkmodel2vec.llm_loader import load_llm2vec_model
 import torch
@@ -9,7 +10,7 @@ from dkmodel2vec.config import VOCAB_SIZE, DANISH_INSTRUCTION
 from dkmodel2vec.vocab import create_vocabulary, lower_case_tokenizer
 from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
-from dkmodel2vec.evaluator import evaluate_model
+from dkmodel2vec.evaluator import evaluate_model, predict_bm25
 from pathlib import Path
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
@@ -25,6 +26,9 @@ if __name__ == "__main__":
     mlflow.set_experiment("llm2model2vec")
 
     dsdk = load_data()
+    dsdk = dsdk.map(
+        lambda example: predict_bm25(example, deepcopy(tokenizer)), num_proc=4
+    )
 
     skf = StratifiedKFold(n_splits=10)
     splits = skf.split(np.zeros(dsdk.num_rows), dsdk["has_positive_and_negative"])
@@ -36,9 +40,9 @@ if __name__ == "__main__":
             texts = ds_train["query"] + ds_train["positive"] + ds_train["negative"]
             vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
 
-            m2v_instruct = distill_from_model_and_corpus(
+            m2v_instruct_model = distill_from_model_and_corpus(
                 model=wrapped_model,
-                tokenizer=tokenizer,
+                tokenizer=deepcopy(tokenizer),
                 vocabulary=vocabulary,
                 instruction=DANISH_INSTRUCTION,
                 corpus=texts,
@@ -48,13 +52,15 @@ if __name__ == "__main__":
 
             m2v_model = distill_from_model_and_corpus(
                 model=wrapped_model,
-                tokenizer=tokenizer,
+                tokenizer=deepcopy(tokenizer),
                 vocabulary=vocabulary,
                 corpus=texts,
                 pca_dims=256,
                 quantize_to="int8",
             )
-            evaluate_model(dataset=ds_test, model=m2v_model)
+            evaluate_model(
+                dataset=ds_test, model=m2v_model, instruction_model=m2v_instruct_model
+            )
 
     # train final model on full dataset
     with mlflow.start_run(run_name="full_model"):
@@ -62,7 +68,7 @@ if __name__ == "__main__":
         vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
-            tokenizer=tokenizer,
+            tokenizer=deepcopy(tokenizer),
             vocabulary=vocabulary,
             corpus=texts,
             pca_dims=256,
@@ -70,7 +76,7 @@ if __name__ == "__main__":
         )
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
-            tokenizer=tokenizer,
+            tokenizer=deepcopy(tokenizer),
             vocabulary=vocabulary,
             instruction=DANISH_INSTRUCTION,
             corpus=texts,

@@ -1,13 +1,12 @@
 import numpy as np
 import pandas as pd
 import mlflow
-import mlflow.sklearn
-from datasets import load_dataset
+
 from model2vec import StaticModel
 from sklearn.metrics import (
     accuracy_score,
     precision_recall_fscore_support,
-    matthews_corrcoef,
+
 )
 from sklearn.metrics import confusion_matrix, classification_report
 
@@ -15,7 +14,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 # import seaborn as sns
 from tqdm import tqdm
 import json
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Tuple
 from datasets import DatasetDict, Dataset
 from rank_bm25 import BM25Okapi
 from tokenizers import Tokenizer
@@ -200,10 +199,6 @@ def evaluate_model(
     log_performance(results, log_prefix="instruct")
 
     #### BM25 performance
-    print("Computing baseline scores with BM25")
-    dataset = dataset.map(
-        lambda example: predict_bm25(example, model.tokenizer), num_proc=4
-    )
     bm25_results = evaluate_classification(
         dataset["bm25_prediction"], ground_truth=np.ones_like(predictions)
     )
