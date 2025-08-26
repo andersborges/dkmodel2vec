@@ -5,7 +5,7 @@ import mlflow
 from datasets import load_dataset
 
 from dkmodel2vec.data_loader import load_data
-from dkmodel2vec.config import VOCAB_SIZE
+from dkmodel2vec.config import VOCAB_SIZE, DANISH_INSTRUCTION
 from dkmodel2vec.vocab import create_vocabulary, lower_case_tokenizer
 from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
@@ -35,6 +35,17 @@ if __name__ == "__main__":
             # Get texts from all examples in fold
             texts = ds_train["query"] + ds_train["positive"] + ds_train["negative"]
             vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
+
+            m2v_instruct = distill_from_model_and_corpus(
+                model=wrapped_model,
+                tokenizer=tokenizer,
+                vocabulary=vocabulary,
+                instruction=DANISH_INSTRUCTION,
+                corpus=texts,
+                pca_dims=256,
+                quantize_to="int8",
+            )
+
             m2v_model = distill_from_model_and_corpus(
                 model=wrapped_model,
                 tokenizer=tokenizer,
@@ -53,6 +64,15 @@ if __name__ == "__main__":
             model=wrapped_model,
             tokenizer=tokenizer,
             vocabulary=vocabulary,
+            corpus=texts,
+            pca_dims=256,
+            quantize_to="int8",
+        )
+        m2v_model = distill_from_model_and_corpus(
+            model=wrapped_model,
+            tokenizer=tokenizer,
+            vocabulary=vocabulary,
+            instruction=DANISH_INSTRUCTION,
             corpus=texts,
             pca_dims=256,
             quantize_to="int8",

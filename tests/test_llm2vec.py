@@ -267,6 +267,41 @@ def test_custom_distillation(tiny_fine_tuned_llm2vec_model):
     assert len(tokenizer.encode("tobeinthestandardvocab2").ids) > 1
 
 
+def test_custom_distillation_with_instruction(tiny_fine_tuned_llm2vec_model):
+    from dkmodel2vec.distillation import distill_from_model_and_corpus
+
+    wrapped_model = LlamaModelWrapper(tiny_fine_tuned_llm2vec_model)
+    texts = [
+        "This Helloworld text is quite unique.",
+        "This text contain the 'theseunique' token",
+    ]
+    vocab = [
+        "Helloworld",
+        "theseunique",
+        "tokensarenotlikely",
+        "tobeinthestandardvocab",
+    ]
+    m2v_model = distill_from_model_and_corpus(
+        model=wrapped_model,
+        tokenizer=tiny_fine_tuned_llm2vec_model.tokenizer,
+        vocabulary=vocab,
+        instruction="PREPEND THIS TO MY TEXT:",
+        corpus=texts,
+        pca_dims=256,
+        device="cpu",
+    )
+
+    embeddings = m2v_model.encode(vocab)
+    assert embeddings.shape[0]
+    tokenizer = m2v_model.tokenizer
+    assert len(tokenizer.encode("Helloworld").ids) == 1
+    assert (
+        tokenizer.encode("Helloworld").ids[0]
+        in tokenizer.encode("This Helloworld text").ids
+    )
+    assert len(tokenizer.encode("tobeinthestandardvocab2").ids) > 1
+
+
 @pytest.fixture
 def sample_dataset():
     """Short test examples"""

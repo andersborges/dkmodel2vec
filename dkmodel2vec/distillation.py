@@ -29,7 +29,9 @@ from model2vec.tokenizer import (
     replace_vocabulary,
     turn_tokens_into_ids,
 )
+from dkmodel2vec.vocab import turn_tokens_into_ids_with_instruction
 from model2vec.tokenizer.datamodels import Token
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ def distill_from_model_and_corpus(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerFast,
     vocabulary: list[str] | None = None,
+    instruction: str | None = None,
     corpus: list[str] | None = None,
     device: str | None = None,
     pca_dims: PCADimType = 256,
@@ -61,6 +64,7 @@ def distill_from_model_and_corpus(
     :param model: The model to use.
     :param tokenizer: The tokenizer to use.
     :param vocabulary: The vocabulary to use. If this is None, we use the model's vocabulary.
+    :param instruction: Instruction text if using embedding model that requires encoder. The intruction is prepended every token but the output tokenizer is not modified.
     :param corpus: The texts used to estimate frequency of tokens (both internal and external). If this is None, the ordering
     of the tokens will be internal tokens, then external tokens.
     :param device: The device to use.
@@ -116,11 +120,11 @@ def distill_from_model_and_corpus(
             Optional[str], [token for token in tokenizer.get_vocab() if "_" == token][0]
         )
         print(
-            "The unknown token is not set. Setting it to the '_' token. This is a workaround to allow encoding of more texts without error."
+            "The unknown token is not set. Hardcoding it. This is a workaround to allow encoding of more texts without error."
         )
         unk_token_obj = Token(
             form="[UNK]", normalized_form="[UNK]", is_subword=False, is_internal=False
-                )
+        )
         all_tokens = all_tokens + [unk_token_obj]
     if pad_token is None:
         if unk_token is not None:
@@ -138,7 +142,7 @@ def distill_from_model_and_corpus(
     backend_tokenizer_replaced_vocab = replace_vocabulary(
         backend_tokenizer,
         all_tokens,
-        unk_token="[UNK]",
+        unk_token=unk_token,
         pad_token=pad_token,
     )
 
@@ -155,9 +159,19 @@ def distill_from_model_and_corpus(
         sorted_all_tokens = all_tokens
 
     logger.info(f"Creating embeddings for {len(all_tokens)} tokens")
-    # Convert tokens to IDs
 
-    token_ids = turn_tokens_into_ids(sorted_all_tokens, tokenizer, unk_token)
+    # Convert tokens to IDs
+    if instruction is not None:
+        print("""Adding instruction to tokens. 
+              The output tokenizer is however not modified. 
+              Remember you will need an encoder without instructions as well.""")
+
+    token_ids = turn_tokens_into_ids_with_instruction(
+        tokens=sorted_all_tokens,
+        base_tokenizer=tokenizer,
+        unk_token=unk_token,
+        instruction=instruction,
+    )
 
     # Create the embeddings
     embeddings = create_embeddings(

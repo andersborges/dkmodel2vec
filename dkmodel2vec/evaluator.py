@@ -67,12 +67,16 @@ def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
 
 
 def compute_distances(
-    model: StaticModel,
+    instruction_encoder: StaticModel | None,
+    encoder: StaticModel,
     dataset: DatasetDict,
     query_column_name="query",
     batch_size: int = 1024,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Compute Euclidean distances between queries and positive/negative examples."""
+    if instruction_encoder is None:
+        instruction_encoder = encoder
+
     queries = dataset[query_column_name]
     positives = dataset["positive"]
     negatives = dataset["negative"]
@@ -88,9 +92,9 @@ def compute_distances(
         batch_positives = positives[i:batch_end]
         batch_negatives = negatives[i:batch_end]
 
-        query_embeds = model.encode(batch_queries)
-        pos_embeds = model.encode(batch_positives)
-        neg_embeds = model.encode(batch_negatives)
+        query_embeds = instruction_encoder.encode(batch_queries)
+        pos_embeds = encoder.encode(batch_positives)
+        neg_embeds = encoder.encode(batch_negatives)
 
         # Compute Euclidean distances
         # For distance metrics, smaller values indicate higher similarity
@@ -155,7 +159,10 @@ def log_performance(results: dict, log_prefix: str = ""):
 
 
 def evaluate_model(
-    dataset: Dataset, model: StaticModel, max_samples: int | None = None
+    dataset: Dataset,
+    model: StaticModel,
+    instruction_model: StaticModel,
+    max_samples: int | None = None,
 ) -> Dict:
     """Run the complete evaluation on the subset of the test set that contains both positive and negative examples."""
     dataset = dataset.filter(
@@ -164,9 +171,10 @@ def evaluate_model(
     if max_samples is not None:
         dataset = dataset.select(range(max_samples))
 
+    ##### LLM2VEC2MODEL2VEC without instruction
     # Compute similarities
     print("Computing similarities with raw documents")
-    pos_dists, neg_dists = compute_distances(model=model, dataset=dataset)
+    pos_dists, neg_dists = compute_distances(encoder=model, dataset=dataset)
 
     print("Evaluating classification performance...")
     # Classification: positive class if pos_distance < neg_distance
@@ -175,37 +183,44 @@ def evaluate_model(
         predictions, ground_truth=np.ones_like(predictions)
     )
     log_performance(results)
+
+    ##### LLM2VEC2MODEL2VEC WITH instructions
 
     print("Computing similarities with documents using instructions...")
     pos_dists, neg_dists = compute_distances(
-        model=model, dataset=dataset, query_column_name="query_danish_instruct"
+        encoder=model, instruction_encoder=instruction_model, dataset=dataset
     )
 
     print("Evaluating classification performance...")
     # Classification: positive class if pos_distance < neg_distance
-    predictions = (pos_dists < neg_dists).astype(int)
+    predictions_with_instruct = (pos_dists < neg_dists).astype(int)
     results = evaluate_classification(
-        predictions, ground_truth=np.ones_like(predictions)
+        predictions_with_instruct, ground_truth=np.ones_like(predictions_with_instruct)
     )
-    log_performance(results)
+    log_performance(results, log_prefix="instruct")
 
+    #### BM25 performance
     print("Computing baseline scores with BM25")
-    dataset = dataset.map(lambda example: predict_bm25(example, model.tokenizer))
+    dataset = dataset.map(
+        lambda example: predict_bm25(example, model.tokenizer), num_proc=4
+    )
     bm25_results = evaluate_classification(
         dataset["bm25_prediction"], ground_truth=np.ones_like(predictions)
     )
     log_performance(bm25_results, log_prefix="bm25")
 
+    #### Good sentence transformer for comparison
     print("Computing scores with good sentence transformer model... ")
     best_sentence_transformer = get_best_sentence_transformer()
     pos_dists, neg_dists = compute_distances(
-        model=best_sentence_transformer,
+        encoder=best_sentence_transformer,
         dataset=dataset,
         query_column_name="query_instruct",
     )
     sentence_transformer_predictions = (pos_dists < neg_dists).astype(int)
     log_performance(sentence_transformer_predictions, prefix=BEST_SENTENCE_TRANSFORMER)
 
+    #### ENSEMBLE PREDICTION
     print("Computing ensemble prediction")
     all_predictions = np.array(
         [predictions, dataset["bm25_prediction"], sentence_transformer_predictions]
