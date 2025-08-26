@@ -23,6 +23,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
+```bash
+# Install the local package
+uv pip install -e . 
+```
 ## Usage
 To train the model you will probably want a GPU to perform inference on the many tokens. 
 
