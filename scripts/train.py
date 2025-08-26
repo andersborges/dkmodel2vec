@@ -1,4 +1,3 @@
-from copy import deepcopy
 from collections import Counter
 from dkmodel2vec.llm_loader import load_llm2vec_model
 import torch
@@ -27,7 +26,7 @@ if __name__ == "__main__":
 
     dsdk = load_data()
     dsdk = dsdk.map(
-        lambda example: predict_bm25(example, deepcopy(tokenizer)), num_proc=4
+        lambda example: predict_bm25(example, tokenizer), num_proc=4
     )
 
     skf = StratifiedKFold(n_splits=10)
@@ -42,7 +41,7 @@ if __name__ == "__main__":
 
             m2v_instruct_model = distill_from_model_and_corpus(
                 model=wrapped_model,
-                tokenizer=deepcopy(tokenizer),
+                tokenizer=tokenizer,
                 vocabulary=vocabulary,
                 instruction=DANISH_INSTRUCTION,
                 corpus=texts,
@@ -52,7 +51,7 @@ if __name__ == "__main__":
 
             m2v_model = distill_from_model_and_corpus(
                 model=wrapped_model,
-                tokenizer=deepcopy(tokenizer),
+                tokenizer=tokenizer,
                 vocabulary=vocabulary,
                 corpus=texts,
                 pca_dims=256,
@@ -68,7 +67,7 @@ if __name__ == "__main__":
         vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
-            tokenizer=deepcopy(tokenizer),
+            tokenizer=tokenizer,
             vocabulary=vocabulary,
             corpus=texts,
             pca_dims=256,
@@ -76,7 +75,7 @@ if __name__ == "__main__":
         )
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
-            tokenizer=deepcopy(tokenizer),
+            tokenizer=tokenizer,
             vocabulary=vocabulary,
             instruction=DANISH_INSTRUCTION,
             corpus=texts,

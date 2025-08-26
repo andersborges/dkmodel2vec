@@ -66,9 +66,9 @@ def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
 
 
 def compute_distances(
-    instruction_encoder: StaticModel | None,
     encoder: StaticModel,
     dataset: DatasetDict,
+    instruction_encoder: StaticModel | None = None,
     query_column_name="query",
     batch_size: int = 1024,
 ) -> Tuple[np.ndarray, np.ndarray]:

@@ -195,7 +195,6 @@ def test_model2vec_distillation(tiny_fine_tuned_llm2vec_model, sample_texts):
         model=wrapped_model,
         tokenizer=tiny_fine_tuned_llm2vec_model.tokenizer,
         pca_dims=256,
-        device="cpu",
     )
     embeddings = m2v_model.encode(sample_texts)
     assert embeddings.shape
@@ -223,7 +222,6 @@ def test_adding_vocabulary(tiny_fine_tuned_llm2vec_model):
         tokenizer=tiny_fine_tuned_llm2vec_model.tokenizer,
         vocabulary=vocab,
         pca_dims=256,
-        device="cpu",
     )
 
     embeddings = m2v_model.encode(vocab)
@@ -253,7 +251,6 @@ def test_custom_distillation(tiny_fine_tuned_llm2vec_model):
         vocabulary=vocab,
         corpus=texts,
         pca_dims=256,
-        device="cpu",
     )
 
     embeddings = m2v_model.encode(vocab)
@@ -288,7 +285,6 @@ def test_custom_distillation_with_instruction(tiny_fine_tuned_llm2vec_model):
         instruction="PREPEND THIS TO MY TEXT:",
         corpus=texts,
         pca_dims=256,
-        device="cpu",
     )
 
     embeddings = m2v_model.encode(vocab)
@@ -341,7 +337,7 @@ def test_compute_distances(sample_model, sample_dataset):
 
     model = sample_model
     dataset = sample_dataset
-    pos_dists, neg_dists = compute_distances(model, dataset["train"])
+    pos_dists, neg_dists = compute_distances(encoder = model, dataset = dataset["train"])
     # for the test cases, all the positive cases have shorter distances
     assert all(pos_dists < neg_dists)
 
