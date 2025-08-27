@@ -38,6 +38,15 @@ if __name__ == "__main__":
             # Get texts from all examples in fold
             texts = ds_train["query"] + ds_train["positive"] + ds_train["negative"]
             vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
+            
+            m2v_model = distill_from_model_and_corpus(
+                model=wrapped_model,
+                tokenizer=tokenizer,
+                vocabulary=vocabulary,
+                corpus=texts,
+                pca_dims=256,
+                quantize_to="int8",
+            )
 
             m2v_instruct_model = distill_from_model_and_corpus(
                 model=wrapped_model,
@@ -49,14 +58,6 @@ if __name__ == "__main__":
                 quantize_to="int8",
             )
 
-            m2v_model = distill_from_model_and_corpus(
-                model=wrapped_model,
-                tokenizer=tokenizer,
-                vocabulary=vocabulary,
-                corpus=texts,
-                pca_dims=256,
-                quantize_to="int8",
-            )
             evaluate_model(
                 dataset=ds_test, model=m2v_model, instruction_model=m2v_instruct_model
             )

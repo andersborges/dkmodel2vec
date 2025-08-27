@@ -29,13 +29,20 @@ def get_best_sentence_transformer():
 
 def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
     """Convert a query its corresponding tokens and get the bm25 prediction from the score across the corpus consisting of a single positive and negative candidates."""
-    q_tokens = tokenizer.encode(example["query"], add_special_tokens=False).tokens
-    corpus = [
-        ts.tokens
-        for ts in tokenizer.encode_batch(
-            [example["negative"], example["positive"]], add_special_tokens=False
-        )
-    ]
+    
+    # Use backend_tokenizer to get Encoding objects with .tokens attribute
+    q_encoding = tokenizer.backend_tokenizer.encode(example["query"])
+    q_tokens = q_encoding.tokens
+    
+    corpus = []
+    for text in [example["negative"], example["positive"]]:
+        if isinstance(text, str):
+            encoding = tokenizer.backend_tokenizer.encode(text)
+            corpus.append(encoding.tokens)
+        else:
+            example["bm25_prediction"] = -1
+            return example
+            
 
     # somehow BM25 does not work with only 2 examples? so adding a third
     corpus.append(["dummy", "document", "for", "idf", "calculation"])
@@ -44,8 +51,7 @@ def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
     scores = bm25.get_scores(q_tokens)[:2]  # get rid of the dummy document
     example["bm25_prediction"] = np.argmax(scores)
 
-    return example  # 1 is positive predictione and 0 is negative prediction
-
+    return example
 
 #    def load_dataset(self, dataset_name: str, split: str = "test",
 #                     query_col: str = "query", pos_col: str = "positive",
