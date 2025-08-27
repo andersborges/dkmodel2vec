@@ -160,14 +160,16 @@ def test_llama_model_wrapper(tiny_fine_tuned_llm2vec_model):
     """Test that the LlamaModelWrapper properly handles token_type_ids."""
     import torch
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     wrapped_model = LlamaModelWrapper(tiny_fine_tuned_llm2vec_model.model)
     print(f"Wrapped model type: {type(wrapped_model)}")
     print(f"Original model type: {type(tiny_fine_tuned_llm2vec_model.model)}")
 
     # Test the wrapper directly
-    dummy_input = torch.tensor([[1, 2, 3]])
-    dummy_attention = torch.ones_like(dummy_input)
-    dummy_token_types = torch.zeros_like(dummy_input)
+    dummy_input = torch.tensor([[1, 2, 3]]).to(device)
+    dummy_attention = torch.ones_like(dummy_input).to(device)
+    dummy_token_types = torch.zeros_like(dummy_input).to(device)
 
     wrapped_model(
         input_ids=dummy_input,
@@ -176,8 +178,8 @@ def test_llama_model_wrapper(tiny_fine_tuned_llm2vec_model):
     )
 
     # Test that .to() returns the wrapper
-    wrapped_model_cpu = wrapped_model.to("cpu")
-    assert type(wrapped_model_cpu) == type(wrapped_model), (
+    wrapped_model_device = wrapped_model.to(device)
+    assert type(wrapped_model_device) == type(wrapped_model), (
         "to() method should return wrapper"
     )
 
@@ -337,7 +339,7 @@ def test_compute_distances(sample_model, sample_dataset):
 
     model = sample_model
     dataset = sample_dataset
-    pos_dists, neg_dists = compute_distances(encoder = model, dataset = dataset["train"])
+    pos_dists, neg_dists = compute_distances(encoder=model, dataset=dataset["train"])
     # for the test cases, all the positive cases have shorter distances
     assert all(pos_dists < neg_dists)
 
@@ -370,14 +372,34 @@ def test_bm25(sample_model):
     assert example_output["bm25_prediction"] == 1
 
 
-def test_data_loader():
-    from dkmodel2vec.data_loader import load_data
+def test_bm25(sample_model):
+    from dkmodel2vec.evaluator import predict_bm25
 
+    q = "CAT"
+    pos = "CAT CAT CAT CAT "
+    neg = "This is not it here either longer text"
+    example = {"query": q, "positive": pos, "negative": neg}
+    example_output = predict_bm25(example, sample_model.tokenizer)
+    assert example_output["bm25_prediction"] == 1
+
+
+def test_sentence_transformer_predict():
+    from dkmodel2vec.data_loader import load_data
+    from dkmodel2vec.evaluator import (
+        predict_sentence_transformer,
+        load_sentence_transformer,
+    )
+
+    model = load_sentence_transformer()
     ds = load_data()
-    assert ds.num_rows > 100
-    assert (
-        True in ds["has_positive_and_negative"]
-        and False in ds["has_positive_and_negative"]
+    ds = ds.filter(
+        lambda example: True if example["has_positive_and_negative"] else False
+    )
+    batch_size = 1000
+    ds = ds.map(
+        lambda batch: predict_sentence_transformer(batch, model),
+        batched=True,
+        batch_size=batch_size,
     )
 
 

@@ -117,7 +117,7 @@ def distill_from_model_and_corpus(
 
     if unk_token is None:
         unk_token = cast(
-            Optional[str], [token for token in tokenizer.get_vocab() if token==','][0]
+            Optional[str], [token for token in tokenizer.get_vocab() if token == ","][0]
         )
         print(
             "The unknown token is not set. Hardcoding it. This is a workaround to allow encoding of more texts without error."

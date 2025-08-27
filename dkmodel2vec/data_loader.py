@@ -1,4 +1,4 @@
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset, DatasetDict, Dataset
 
 from dkmodel2vec.config import E5_EMBED_INSTRUCTION, DANISH_INSTRUCTION
 
@@ -25,7 +25,7 @@ def get_danish_detailed_instruct(example: dict) -> dict:
     return example
 
 
-def load_data():
+def load_data() -> Dataset:
     """Loads dataset and only keeps examples in Danish from the training set.
     Adds a column with an index which we need for the stratified cross validation."""
     # Login using e.g. `huggingface-cli login` to access this dataset

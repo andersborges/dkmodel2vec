@@ -6,7 +6,6 @@ from model2vec import StaticModel
 from sklearn.metrics import (
     accuracy_score,
     precision_recall_fscore_support,
-
 )
 from sklearn.metrics import confusion_matrix, classification_report
 
@@ -22,18 +21,19 @@ from sentence_transformers import SentenceTransformer
 from dkmodel2vec.config import BEST_SENTENCE_TRANSFORMER
 
 
-def get_best_sentence_transformer():
+def load_sentence_transformer():
     model = SentenceTransformer(BEST_SENTENCE_TRANSFORMER)
+    model.half()  # reduce precision to speed up inference
     return model
 
 
 def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
     """Convert a query its corresponding tokens and get the bm25 prediction from the score across the corpus consisting of a single positive and negative candidates."""
-    
+
     # Use backend_tokenizer to get Encoding objects with .tokens attribute
     q_encoding = tokenizer.backend_tokenizer.encode(example["query"])
     q_tokens = q_encoding.tokens
-    
+
     corpus = []
     for text in [example["negative"], example["positive"]]:
         if isinstance(text, str):
@@ -42,16 +42,45 @@ def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
         else:
             example["bm25_prediction"] = -1
             return example
-            
 
     # somehow BM25 does not work with only 2 examples? so adding a third
-    corpus.append(["dummy", "document", "for", "idf", "calculation"])
+    corpus.append(
+        [
+            "ULTRARARETOKEN",
+            "ULTRARARETOKEN2",
+            "ULTRARARETOKEN3",
+            "ULTRARARETOKEN4",
+            "ULTRARARETOKEN5",
+        ]
+    )
 
     bm25 = BM25Okapi(corpus)
     scores = bm25.get_scores(q_tokens)[:2]  # get rid of the dummy document
     example["bm25_prediction"] = np.argmax(scores)
 
     return example
+
+
+def predict_sentence_transformer(
+    batch: dict, sentence_transformer: SentenceTransformer
+) -> dict:
+    """Embed instruction-query, positive and negative documents and predict the most similar document index (0 or 1)."""
+    # Convert to numpy arrays for boolean indexing
+    queries = batch["query_instruct"]
+    positives = batch["positive"]
+    negatives = batch["negative"]
+
+    query_embeds = sentence_transformer.encode(queries)
+    pos_embeds = sentence_transformer.encode(positives)
+    neg_embeds = sentence_transformer.encode(negatives)
+
+    pos_distances = np.linalg.norm(query_embeds - pos_embeds, axis=1)
+    neg_distances = np.linalg.norm(query_embeds - neg_embeds, axis=1)
+    predictions = (pos_distances < neg_distances).astype(int)
+
+    batch["sentence_transformer_pred"] = predictions.tolist()
+    return batch
+
 
 #    def load_dataset(self, dataset_name: str, split: str = "test",
 #                     query_col: str = "query", pos_col: str = "positive",
@@ -146,7 +175,7 @@ def log_performance(results: dict, log_prefix: str = ""):
 
     for metric in metrics_to_log:
         if not np.isnan(results[metric]):
-            mlflow.log_metric(f"{log_prefix}_metric", results[metric])
+            mlflow.log_metric(f"{log_prefix}_{metric}", results[metric])
 
     class_report = classification_report(
         results["ground_truth"], results["predictions"], output_dict=True
@@ -167,14 +196,8 @@ def evaluate_model(
     dataset: Dataset,
     model: StaticModel,
     instruction_model: StaticModel,
-    max_samples: int | None = None,
-) -> Dict:
+) -> Dataset:
     """Run the complete evaluation on the subset of the test set that contains both positive and negative examples."""
-    dataset = dataset.filter(
-        lambda example: True if example["has_positive_and_negative"] else False
-    )
-    if max_samples is not None:
-        dataset = dataset.select(range(max_samples))
 
     ##### LLM2VEC2MODEL2VEC without instruction
     # Compute similarities
@@ -184,10 +207,11 @@ def evaluate_model(
     print("Evaluating classification performance...")
     # Classification: positive class if pos_distance < neg_distance
     predictions = (pos_dists < neg_dists).astype(int)
+    dataset = dataset.add_column("prediction", predictions)
     results = evaluate_classification(
         predictions, ground_truth=np.ones_like(predictions)
     )
-    log_performance(results)
+    log_performance(results, log_prefix="raw")
 
     ##### LLM2VEC2MODEL2VEC WITH instructions
 
@@ -199,34 +223,63 @@ def evaluate_model(
     print("Evaluating classification performance...")
     # Classification: positive class if pos_distance < neg_distance
     predictions_with_instruct = (pos_dists < neg_dists).astype(int)
+    dataset = dataset.add_column(
+        "prediction_with_instruction", predictions_with_instruct
+    )
+
     results = evaluate_classification(
         predictions_with_instruct, ground_truth=np.ones_like(predictions_with_instruct)
     )
     log_performance(results, log_prefix="instruct")
+    return dataset
 
+
+def evaluate_bm25(dataset: Dataset):
     #### BM25 performance
     bm25_results = evaluate_classification(
         dataset["bm25_prediction"], ground_truth=np.ones_like(predictions)
     )
     log_performance(bm25_results, log_prefix="bm25")
+    return
 
+
+def evaluate_sentence_transformer(dataset: Dataset) -> Dataset:
     #### Good sentence transformer for comparison
     print("Computing scores with good sentence transformer model... ")
-    best_sentence_transformer = get_best_sentence_transformer()
-    pos_dists, neg_dists = compute_distances(
-        encoder=best_sentence_transformer,
-        dataset=dataset,
-        query_column_name="query_instruct",
+    best_sentence_transformer = load_sentence_transformer()
+    dataset = dataset.map(
+        lambda batch: predict_sentence_transformer(batch, best_sentence_transformer),
+        batched=True,
+        batch_size=16384,
     )
-    sentence_transformer_predictions = (pos_dists < neg_dists).astype(int)
-    log_performance(sentence_transformer_predictions, prefix=BEST_SENTENCE_TRANSFORMER)
 
+    sentence_transformer_predictions = dataset["sentence_transformer_pred"]
+
+    sentence_transformer_results = evaluate_classification(
+        sentence_transformer_predictions,
+        ground_truth=np.ones_like(sentence_transformer_predictions),
+    )
+    log_performance(
+        sentence_transformer_results,
+        log_prefix=BEST_SENTENCE_TRANSFORMER.replace("/", "_"),
+    )
+    return dataset
+
+
+def evaluate_ensemble_model(dataset: Dataset):
     #### ENSEMBLE PREDICTION
     print("Computing ensemble prediction")
     all_predictions = np.array(
-        [predictions, dataset["bm25_prediction"], sentence_transformer_predictions]
+        [
+            dataset["prediction"],
+            dataset["bm25_prediction"],
+            sentence_transformer_predictions,
+        ]
     )
     ensemble_predictions = (all_predictions.sum(axis=0) >= 2).astype(int)
-    log_performance(ensemble_predictions, prefix="ensemble")
+    ensemble_results = evaluate_classification(
+        ensemble_predictions, ground_truth=np.ones_like(ensemble_predictions)
+    )
+    log_performance(results=ensemble_results, log_prefix="ensemble")
 
     return
