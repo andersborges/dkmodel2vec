@@ -5,6 +5,7 @@ import mlflow
 
 from dkmodel2vec.data_loader import load_data
 from dkmodel2vec.config import VOCAB_SIZE, DANISH_INSTRUCTION, REFERENCE_MODEL2VEC
+from dkmodel2vec.constants import HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN, DATASET_NEGATIVE_COLUMN, DATASET_POSITIVE_COLUMN, DATASET_QUERY_COLUMN, PREDICTION_COLUMN, BM25_PREDICTION_COLUMN
 from dkmodel2vec.vocab import create_vocabulary, lower_case_tokenizer
 from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
@@ -43,7 +44,7 @@ if __name__ == "__main__":
         with mlflow.start_run(run_name=f"fold_{fold_n}", nested=True):
             ds_train, ds_test = dsdk.select(train_idx), dsdk.select(test_idx)
             # Get texts from all examples in fold
-            texts = ds_train["query"] + ds_train["positive"] + ds_train["negative"]
+            texts = ds_train[DATASET_QUERY_COLUMN] + ds_train[DATASET_POSITIVE_COLUMN] + ds_train[DATASET_NEGATIVE_COLUMN]
             vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
             m2v_model = distill_from_model_and_corpus(
                 model=wrapped_model,
@@ -62,7 +63,7 @@ if __name__ == "__main__":
             #     pca_dims=256,
             # )
             ds_test_for_eval = ds_test.filter(
-                lambda example: True if example["has_positive_and_negative"] else False
+                lambda example: True if example[HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN] else False
             )
 
             ds_test_for_eval = evaluate_model(
@@ -75,11 +76,14 @@ if __name__ == "__main__":
             ds_test_for_eval = evaluate_sentence_transformer(
                 model_name=REFERENCE_MODEL2VEC, dataset=ds_test_for_eval
             )
-            evaluate_ensemble_model(ds_test_for_eval)
+            evaluate_ensemble_model(ds_test_for_eval,
+                                    column_names= [PREDICTION_COLUMN,
+                                                   REFERENCE_MODEL2VEC, 
+                                                   BM25_PREDICTION_COLUMN])
 
     # train final model on full dataset
     with mlflow.start_run(run_name="full_model"):
-        texts = dsdk["query"] + dsdk["positive"] + dsdk["negative"]
+        texts = dsdk[DATASET_QUERY_COLUMN] + dsdk[DATASET_POSITIVE_COLUMN] + dsdk[DATASET_NEGATIVE_COLUMN]
         vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
@@ -87,7 +91,6 @@ if __name__ == "__main__":
             vocabulary=vocabulary,
             corpus=texts,
             pca_dims=256,
-            quantize_to="int8",
         )
         m2v_model = distill_from_model_and_corpus(
             model=wrapped_model,
@@ -96,7 +99,6 @@ if __name__ == "__main__":
             instruction=DANISH_INSTRUCTION,
             corpus=texts,
             pca_dims=256,
-            quantize_to="int8",
         )
         #        evaluate_model(dataset=dsdk, model=m2v_model)
         #        evaluate_bm25(dsdk)
@@ -104,5 +106,5 @@ if __name__ == "__main__":
         models_dir = Path(__file__).parent / "models"
         models_dir.mkdir(exist_ok=True)
 
-        model_name = "dkllm2vec2model2vec"
+        model_name = "dk-llm2vec-model2vec"
         m2v_model.save_pretrained(models_dir / model_name)
