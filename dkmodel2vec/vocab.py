@@ -34,6 +34,7 @@ def tokenize_by_word(texts: list[str]) -> Counter:
 
 def create_vocabulary(texts: list[str], vocab_size=VOCAB_SIZE) -> list[str]:
     """Create the vocabulary that is used as input to distillation. Vocabulary size is limited to VOCAB_SIZE"""
+    logger.info("Creating vocabulary")
     words = tokenize_by_word(texts)
     word_counts = Counter(words)
     vocabulary = [word for word, _ in word_counts.most_common(vocab_size)]

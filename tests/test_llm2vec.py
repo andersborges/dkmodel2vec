@@ -390,7 +390,7 @@ def test_sentence_transformer_predict():
         load_sentence_transformer,
     )
 
-    model = load_sentence_transformer()
+    model = load_sentence_transformer(model_name="minishlab/potion-base-8M")
     ds = load_data()
     ds = ds.filter(
         lambda example: True if example["has_positive_and_negative"] else False

@@ -12,7 +12,6 @@ from sklearn.metrics import confusion_matrix, classification_report
 # import matplotlib.pyplot as plt
 # import seaborn as sns
 from tqdm import tqdm
-import json
 from typing import Dict, Tuple
 from datasets import DatasetDict, Dataset
 from rank_bm25 import BM25Okapi
@@ -20,9 +19,13 @@ from tokenizers import Tokenizer
 from sentence_transformers import SentenceTransformer
 from dkmodel2vec.config import BEST_SENTENCE_TRANSFORMER
 
+from logging import getLogger
 
-def load_sentence_transformer():
-    model = SentenceTransformer(BEST_SENTENCE_TRANSFORMER)
+logger = getLogger(__name__)
+
+
+def load_sentence_transformer(model_name: str = BEST_SENTENCE_TRANSFORMER):
+    model = SentenceTransformer(model_name)
     model.half()  # reduce precision to speed up inference
     return model
 
@@ -201,10 +204,10 @@ def evaluate_model(
 
     ##### LLM2VEC2MODEL2VEC without instruction
     # Compute similarities
-    print("Computing similarities with raw documents")
+    logger.info("Computing similarities with raw documents")
     pos_dists, neg_dists = compute_distances(encoder=model, dataset=dataset)
 
-    print("Evaluating classification performance...")
+    logger.info("Evaluating classification performance...")
     # Classification: positive class if pos_distance < neg_distance
     predictions = (pos_dists < neg_dists).astype(int)
     dataset = dataset.add_column("prediction", predictions)
@@ -215,45 +218,48 @@ def evaluate_model(
 
     ##### LLM2VEC2MODEL2VEC WITH instructions
 
-    print("Computing similarities with documents using instructions...")
-    pos_dists, neg_dists = compute_distances(
-        encoder=model, instruction_encoder=instruction_model, dataset=dataset
-    )
+    # logger.info("Computing similarities with documents using instructions...")
+    # pos_dists, neg_dists = compute_distances(
+    #     encoder=model, instruction_encoder=instruction_model, dataset=dataset
+    # )
 
-    print("Evaluating classification performance...")
-    # Classification: positive class if pos_distance < neg_distance
-    predictions_with_instruct = (pos_dists < neg_dists).astype(int)
-    dataset = dataset.add_column(
-        "prediction_with_instruction", predictions_with_instruct
-    )
+    # logger.info("Evaluating classification performance...")
+    # # Classification: positive class if pos_distance < neg_distance
+    # predictions_with_instruct = (pos_dists < neg_dists).astype(int)
+    # dataset = dataset.add_column(
+    #     "prediction_with_instruction", predictions_with_instruct
+    # )
 
-    results = evaluate_classification(
-        predictions_with_instruct, ground_truth=np.ones_like(predictions_with_instruct)
-    )
-    log_performance(results, log_prefix="instruct")
+    # results = evaluate_classification(
+    #     predictions_with_instruct, ground_truth=np.ones_like(predictions_with_instruct)
+    # )
+    # log_performance(results, log_prefix="instruct")
     return dataset
 
 
 def evaluate_bm25(dataset: Dataset):
     #### BM25 performance
+    predictions = np.array(dataset["bm25_prediction"])
     bm25_results = evaluate_classification(
-        dataset["bm25_prediction"], ground_truth=np.ones_like(predictions)
+        predictions, ground_truth=np.ones_like(predictions)
     )
     log_performance(bm25_results, log_prefix="bm25")
     return
 
 
-def evaluate_sentence_transformer(dataset: Dataset) -> Dataset:
+def evaluate_sentence_transformer(
+    dataset: Dataset, model_name: str = BEST_SENTENCE_TRANSFORMER
+) -> Dataset:
     #### Good sentence transformer for comparison
-    print("Computing scores with good sentence transformer model... ")
-    best_sentence_transformer = load_sentence_transformer()
+    logger.info("Computing scores with sentence transformer model... ")
+    best_sentence_transformer = load_sentence_transformer(model_name)
     dataset = dataset.map(
         lambda batch: predict_sentence_transformer(batch, best_sentence_transformer),
         batched=True,
         batch_size=16384,
     )
 
-    sentence_transformer_predictions = dataset["sentence_transformer_pred"]
+    sentence_transformer_predictions = dataset["sentence_transformer_prediction"]
 
     sentence_transformer_results = evaluate_classification(
         sentence_transformer_predictions,
@@ -261,19 +267,19 @@ def evaluate_sentence_transformer(dataset: Dataset) -> Dataset:
     )
     log_performance(
         sentence_transformer_results,
-        log_prefix=BEST_SENTENCE_TRANSFORMER.replace("/", "_"),
+        log_prefix=model_name.replace("/", "_"),
     )
     return dataset
 
 
 def evaluate_ensemble_model(dataset: Dataset):
     #### ENSEMBLE PREDICTION
-    print("Computing ensemble prediction")
+    logger.info("Computing ensemble prediction")
     all_predictions = np.array(
         [
             dataset["prediction"],
             dataset["bm25_prediction"],
-            sentence_transformer_predictions,
+            dataset["sentence_transformer_prediction"],
         ]
     )
     ensemble_predictions = (all_predictions.sum(axis=0) >= 2).astype(int)

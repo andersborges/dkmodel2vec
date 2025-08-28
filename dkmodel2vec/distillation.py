@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import inspect
 from collections import Counter
 import logging
 import os
 import re
 from typing import Optional, cast
 
+from tqdm import tqdm
 import numpy as np
 from huggingface_hub import model_info
 from tokenizers import Tokenizer
@@ -15,7 +17,9 @@ from transformers import (
     PreTrainedModel,
     PreTrainedTokenizerFast,
 )
-
+import torch
+from torch.nn.utils.rnn import pad_sequence
+from dkmodel2vec.logging import log_memory_usage
 from model2vec.distill.inference import (
     PCADimType,
     create_embeddings,
@@ -29,8 +33,11 @@ from model2vec.tokenizer import (
     replace_vocabulary,
     turn_tokens_into_ids,
 )
+from model2vec.distill.inference import _encode_mean_using_model
 from dkmodel2vec.vocab import turn_tokens_into_ids_with_instruction
 from model2vec.tokenizer.datamodels import Token
+
+_DEFAULT_BATCH_SIZE = 256
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +86,7 @@ def distill_from_model_and_corpus(
     :raises: ValueError if the vocabulary is empty after preprocessing.
 
     """
+    logger.info("Distilling model...")
     if use_subword is not None:
         logger.warning(
             "The `use_subword` parameter is deprecated and will be removed in the next release. It doesn't do anything."
@@ -119,7 +127,7 @@ def distill_from_model_and_corpus(
         unk_token = cast(
             Optional[str], [token for token in tokenizer.get_vocab() if token == ","][0]
         )
-        print(
+        logger.info(
             "The unknown token is not set. Hardcoding it. This is a workaround to allow encoding of more texts without error."
         )
         unk_token_obj = Token(
@@ -129,12 +137,12 @@ def distill_from_model_and_corpus(
     if pad_token is None:
         if unk_token is not None:
             pad_token = unk_token
-            print(
+            logger.info(
                 "The pad token is not set. Setting it to the unk token. This is a workaround for models that don't have a pad token."
             )
         else:
             pad_token = unk_token or all_tokens[0].form
-            print(
+            logger.info(
                 "The pad token is not set. Setting it to the first token in the vocabulary. This is a workaround for models that don't have a pad token."
             )
 
@@ -162,7 +170,7 @@ def distill_from_model_and_corpus(
 
     # Convert tokens to IDs
     if instruction is not None:
-        print("""Adding instruction to tokens. 
+        logger.info("""Adding instruction to tokens. 
               The output tokenizer is however not modified. 
               Remember you will need an encoder without instructions as well.""")
 
@@ -174,20 +182,24 @@ def distill_from_model_and_corpus(
     )
 
     # Create the embeddings
-    embeddings = create_embeddings(
+    log_memory_usage("Before embedding")
+    embeddings = create_embeddings_memory_efficient(
         tokenized=token_ids,
         model=model,
         device=device,
         pad_token_id=tokenizer.get_vocab()[pad_token],
     )
-
+    log_memory_usage("Before postprocessing")
     # Post process the embeddings by applying PCA but do NOT use Zipf weighting (set sif_coefficient to None)
     embeddings = post_process_embeddings(
         np.asarray(embeddings), pca_dims, sif_coefficient=None
     )
+    log_memory_usage("Before weighing")
 
     # Weigh each embedding with 1/freq, where freq is the count of each particular token
     embeddings = weigh_by_freq(token_counts=token_counts, embeddings=embeddings)
+
+    log_memory_usage("Before quantization")
 
     # Quantize the embeddings.
     embeddings = quantize_embeddings(embeddings, quantize_to)
@@ -225,6 +237,7 @@ def distill_from_model_and_corpus(
                 f"Couldn't get the model info from the Hugging Face Hub: {e}. Setting language to None."
             )
             language = None
+    log_memory_usage("Before Staticmodel")
 
     return StaticModel(
         vectors=embeddings,
@@ -321,20 +334,20 @@ def estimate_token_frequencies(
                 token_counts.update(encoding.ids)
 
         except Exception as e:
-            print(f"Error processing batch at index {i}: {e}")
+            logger.info(f"Error processing batch at index {i}: {e}")
             # Fall back to individual processing for this batch
             for n, text in enumerate(batch_strings):
                 try:
                     encoding = backend_tokenizer.encode(text)
                     token_counts.update(encoding.ids)
                 except Exception as e_single:
-                    print(
+                    logger.info(
                         f"Error processing index {i + n} with text: {text}: {e_single}"
                     )
                     continue
 
         if i % (batch_size * 10) == 0:
-            print(f"Processed {i} texts...")
+            logger.info(f"Processed {i} texts...")
 
     return token_counts
 
@@ -361,3 +374,83 @@ def weigh_by_freq(embeddings: np.array, token_counts: Counter):
     weights[: norm_weights.shape[0]] = norm_weights
     embeddings *= weights[:, None]
     return embeddings
+
+
+def create_embeddings_memory_efficient(
+    model: PreTrainedModel,
+    tokenized: list[list[int]],
+    device: str,
+    pad_token_id: int,
+) -> np.ndarray:
+    """
+    Create output embeddings for a bunch of tokens using a pretrained model.
+
+    This version is more memory efficient than the version in model2vec
+    because there are no duplicates of the embeddings. Instead the embeddings
+    are allocated directly in final sorted array in each batch.
+
+    It does a forward pass for all tokens passed in `tokens`.
+
+    :param model: The model to use.
+        This should be a transformers model.
+    :param tokenized: All tokenized tokens.
+    :param device: The torch device to use.
+    :param pad_token_id: The pad token id. Used to pad sequences.
+    :return: The output embeddings.
+    """
+    model = model.to(device)
+
+    # Pre-allocate the final array (will be initialized after first batch)
+    num_sequences = len(tokenized)
+    out_weights = None
+
+    # Add token_type_ids only if the model supports it
+    add_token_type_ids = "token_type_ids" in inspect.getfullargspec(model.forward).args
+
+    # Sort by length for efficient batching
+    lengths = np.asarray([len(sequence) for sequence in tokenized])
+    sort_order = np.argsort(lengths)
+    sorted_tokenized = [tokenized[i] for i in sort_order]
+
+    pbar = tqdm(total=len(sorted_tokenized), desc="Encoding tokens", unit=" tokens")
+
+    for batch_idx in range(0, len(sorted_tokenized), _DEFAULT_BATCH_SIZE):
+        batch = [
+            torch.Tensor(x).long()
+            for x in sorted_tokenized[batch_idx : batch_idx + _DEFAULT_BATCH_SIZE]
+        ]
+
+        encoded = {}
+        encoded["input_ids"] = pad_sequence(
+            batch, batch_first=True, padding_value=pad_token_id
+        )
+        encoded["attention_mask"] = encoded["input_ids"] != pad_token_id
+
+        if add_token_type_ids:
+            encoded["token_type_ids"] = torch.zeros_like(encoded["input_ids"])
+
+        batch_embeddings = _encode_mean_using_model(model, encoded).numpy()
+
+        if out_weights is None:
+            embedding_dim = batch_embeddings.shape[1]
+            out_weights = np.empty(
+                (num_sequences, embedding_dim), dtype=batch_embeddings.dtype
+            )
+
+        # Place each embedding directly in its final position
+        batch_start = batch_idx
+
+        for i, embedding in enumerate(batch_embeddings):
+            # Map from sorted position back to original position
+            sorted_idx = batch_start + i
+            original_idx = sort_order[sorted_idx]
+            out_weights[original_idx] = embedding
+
+        pbar.update(len(batch))
+
+    pbar.close()
+
+    # Clean up any NaN values
+    out_weights = np.nan_to_num(out_weights)
+
+    return out_weights
