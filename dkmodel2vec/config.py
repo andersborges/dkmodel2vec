@@ -5,3 +5,4 @@ E5_EMBED_INSTRUCTION = (
 )
 BEST_SENTENCE_TRANSFORMER = "intfloat/multilingual-e5-large-instruct"
 REFERENCE_MODEL2VEC = "minishlab/potion-base-8M"
+FALLBACK_UNK_TOKEN = "," # only active if no unk_token is found

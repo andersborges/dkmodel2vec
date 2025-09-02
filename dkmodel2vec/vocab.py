@@ -89,7 +89,8 @@ def turn_tokens_into_ids_with_instruction(
     Convert a list of Token objects to their corresponding token ID sequences.
 
     :param tokens: List of Token objects to convert
-    :param base_tokenizer: The base tokenizer to use for converting tokens to IDs    :param unk_token: The string form of the unk token.
+    :param base_tokenizer: The base tokenizer to use for converting tokens to IDs    
+    :param unk_token: The string form of the unk token.
     :param instruction: Optional instruction to prepend to text before tokenization
     :return: List of token IDs corresponding to the input tokens
     """

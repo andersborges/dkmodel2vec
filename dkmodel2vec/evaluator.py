@@ -64,6 +64,32 @@ def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
 
     return example
 
+def predict_sentence_transformer_cos_sim(
+    batch: dict, sentence_transformer: SentenceTransformer, out_column:str = "sentence_transformer_pred"
+) -> dict:
+    """Predict the most similar document index (0 or 1) using cosine similarity. """
+    # Convert to numpy arrays for boolean indexing
+    queries = batch[DATASET_QUERY_COLUMN]
+    positives = batch[DATASET_POSITIVE_COLUMN]
+    negatives = batch[DATASET_NEGATIVE_COLUMN]
+
+    query_embeds = sentence_transformer.encode(queries)
+    pos_embeds = sentence_transformer.encode(positives)
+    neg_embeds = sentence_transformer.encode(negatives)
+
+    # Calculate cosine similarities
+    pos_similarities = np.sum(query_embeds * pos_embeds, axis=1) / (
+        np.linalg.norm(query_embeds, axis=1) * np.linalg.norm(pos_embeds, axis=1)
+    )
+    neg_similarities = np.sum(query_embeds * neg_embeds, axis=1) / (
+        np.linalg.norm(query_embeds, axis=1) * np.linalg.norm(neg_embeds, axis=1)
+    )
+    
+    # Higher cosine similarity means more similar (opposite of distance)
+    predictions = (pos_similarities > neg_similarities).astype(int)
+
+    batch[out_column] = predictions.tolist()
+    return batch
 
 def predict_sentence_transformer(
     batch: dict, sentence_transformer: SentenceTransformer, out_column:str = "sentence_transformer_pred"
@@ -251,7 +277,7 @@ def evaluate_bm25(dataset: Dataset):
 def evaluate_sentence_transformer(
     dataset: Dataset, model_name: str = BEST_SENTENCE_TRANSFORMER
 ) -> Dataset:
-    #### Good sentence transformer for comparison
+    """Add predictions as seperate column in dataset and log performance. """
     logger.info("Computing scores with sentence transformer model... ")
     sentence_transformer = load_sentence_transformer(model_name)
     out_column_name = model_name
@@ -275,7 +301,9 @@ def evaluate_sentence_transformer(
 
 
 def evaluate_ensemble_model(dataset: Dataset, column_names : list[str]):
-    #### ENSEMBLE PREDICTION
+    """Evaluate and log performance of ensemble model. The prediction of the ensemble "
+    is simply the majority of the three columns in the dataset."""
+    
     logger.info("Computing ensemble prediction")
     all_predictions = np.array(
         [ dataset[c] for c in column_names]

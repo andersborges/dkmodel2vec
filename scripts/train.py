@@ -29,10 +29,8 @@ if __name__ == "__main__":
     wrapped_model = LlamaModelWrapper(model)
     tokenizer = lower_case_tokenizer(model.tokenizer)
     wrapped_model.tokenizer = tokenizer
-    # start experiment
     mlflow.set_tracking_uri("http://localhost:8000")
     mlflow.set_experiment("llm2model2vec")
-
     dsdk = load_data()
 
     dsdk = dsdk.map(lambda example: predict_bm25(example, tokenizer), num_proc=4)
@@ -40,49 +38,66 @@ if __name__ == "__main__":
     skf = StratifiedKFold(n_splits=10)
     splits = skf.split(np.zeros(dsdk.num_rows), dsdk["has_positive_and_negative"])
 
-    for fold_n, (train_idx, test_idx) in enumerate(splits):
-        with mlflow.start_run(run_name=f"fold_{fold_n}", nested=True):
-            ds_train, ds_test = dsdk.select(train_idx), dsdk.select(test_idx)
-            # Get texts from all examples in fold
-            texts = ds_train[DATASET_QUERY_COLUMN] + ds_train[DATASET_POSITIVE_COLUMN] + ds_train[DATASET_NEGATIVE_COLUMN]
-            vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
-            m2v_model = distill_from_model_and_corpus(
-                model=wrapped_model,
-                tokenizer=tokenizer,
-                vocabulary=vocabulary,
-                corpus=texts,
-                pca_dims=256,
-            )
+    # Create a parent run for cross-validation
+    with mlflow.start_run(run_name="cross_validation"):
+        # Log common parameters at the parent level
+        mlflow.log_param("VOCAB_SIZE", VOCAB_SIZE)
+        mlflow.log_param("weight of unseen tokens", "min")
+        mlflow.log_param("dataset size", dsdk.num_rows)
+        mlflow.log_param("n_splits", 10)
+        
+        for fold_n, (train_idx, test_idx) in enumerate(splits):
+            with mlflow.start_run(run_name=f"fold_{fold_n}", nested=True):
+                mlflow.log_param("fold_number", fold_n)
+                mlflow.log_param("train set size", len(train_idx))
+                mlflow.log_param("test set size", len(test_idx))
+                
+                ds_train, ds_test = dsdk.select(train_idx), dsdk.select(test_idx)
+                # Get texts from all examples in fold
+                texts = ds_train[DATASET_QUERY_COLUMN] + ds_train[DATASET_POSITIVE_COLUMN] + ds_train[DATASET_NEGATIVE_COLUMN]
+                vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
+                m2v_model = distill_from_model_and_corpus(
+                    model=wrapped_model,
+                    tokenizer=tokenizer,
+                    vocabulary=vocabulary,
+                    corpus=texts,
+                    pca_dims=256,
+                )
 
-            # m2v_instruct_model = distill_from_model_and_corpus(
-            #     model=wrapped_model,
-            #     tokenizer=tokenizer,
-            #     vocabulary=vocabulary,
-            #     instruction=DANISH_INSTRUCTION,
-            #     corpus=texts,
-            #     pca_dims=256,
-            # )
-            ds_test_for_eval = ds_test.filter(
-                lambda example: True if example[HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN] else False
-            )
+                # m2v_instruct_model = distill_from_model_and_corpus(
+                #     model=wrapped_model,
+                #     tokenizer=tokenizer,
+                #     vocabulary=vocabulary,
+                #     instruction=DANISH_INSTRUCTION,
+                #     corpus=texts,
+                #     pca_dims=256,
+                # )
+                ds_test_for_eval = ds_test.filter(
+                    lambda example: True if example[HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN] else False
+                )
 
-            ds_test_for_eval = evaluate_model(
-                dataset=ds_test_for_eval,
-                model=m2v_model,
-                instruction_model=m2v_model,
-            )
-            evaluate_bm25(ds_test_for_eval)
-            ds_test_for_eval = evaluate_sentence_transformer(dataset=ds_test_for_eval)
-            ds_test_for_eval = evaluate_sentence_transformer(
-                model_name=REFERENCE_MODEL2VEC, dataset=ds_test_for_eval
-            )
-            evaluate_ensemble_model(ds_test_for_eval,
-                                    column_names= [PREDICTION_COLUMN,
-                                                   REFERENCE_MODEL2VEC, 
-                                                   BM25_PREDICTION_COLUMN])
+                ds_test_for_eval = evaluate_model(
+                    dataset=ds_test_for_eval,
+                    model=m2v_model,
+                    instruction_model=m2v_model,
+                )
+                evaluate_bm25(ds_test_for_eval)
+                ds_test_for_eval = evaluate_sentence_transformer(dataset=ds_test_for_eval)
+                ds_test_for_eval = evaluate_sentence_transformer(
+                    model_name=REFERENCE_MODEL2VEC, dataset=ds_test_for_eval
+                )
+                evaluate_ensemble_model(ds_test_for_eval,
+                                        column_names=[PREDICTION_COLUMN,
+                                                    REFERENCE_MODEL2VEC, 
+                                                    BM25_PREDICTION_COLUMN])
 
-    # train final model on full dataset
+    # Train final model on full dataset - separate run
     with mlflow.start_run(run_name="full_model"):
+        mlflow.log_param("VOCAB_SIZE", VOCAB_SIZE)
+        mlflow.log_param("weight of unseen tokens", "min")
+        mlflow.log_param("dataset size", dsdk.num_rows)
+        mlflow.log_param("training_type", "full_dataset")
+        
         texts = dsdk[DATASET_QUERY_COLUMN] + dsdk[DATASET_POSITIVE_COLUMN] + dsdk[DATASET_NEGATIVE_COLUMN]
         vocabulary = create_vocabulary(texts, vocab_size=VOCAB_SIZE)
         m2v_model = distill_from_model_and_corpus(
@@ -92,14 +107,14 @@ if __name__ == "__main__":
             corpus=texts,
             pca_dims=256,
         )
-        m2v_model = distill_from_model_and_corpus(
-            model=wrapped_model,
-            tokenizer=tokenizer,
-            vocabulary=vocabulary,
-            instruction=DANISH_INSTRUCTION,
-            corpus=texts,
-            pca_dims=256,
-        )
+        # m2v_model = distill_from_model_and_corpus(
+        #     model=wrapped_model,
+        #     tokenizer=tokenizer,
+        #     vocabulary=vocabulary,
+        #     instruction=DANISH_INSTRUCTION,
+        #     corpus=texts,
+        #     pca_dims=256,
+        # )
         #        evaluate_model(dataset=dsdk, model=m2v_model)
         #        evaluate_bm25(dsdk)
         #        evaluate_sentence_transformer(dsdk)
@@ -108,3 +123,6 @@ if __name__ == "__main__":
 
         model_name = "dk-llm2vec-model2vec"
         m2v_model.save_pretrained(models_dir / model_name)
+        
+        # Log the model path
+        mlflow.log_param("model_save_path", str(models_dir / model_name))

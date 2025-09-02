@@ -7,6 +7,7 @@ from transformers import AutoTokenizer
 from peft import LoraConfig, TaskType, PeftModel
 import numpy as np
 from datasets import Dataset
+from transformers import AutoTokenizer
 
 from dkmodel2vec.llm_loader import load_base_model
 from dkmodel2vec.models import LlamaModelWrapper
@@ -360,26 +361,13 @@ def test_evaluate_classification():
     assert (results["predictions"] == [1, 1, 0]).all()
     assert (results["ground_truth"] == [1, 1, 1]).all()
 
-
-def test_bm25(sample_model):
+def test_bm25(sample_tokenizer):
     from dkmodel2vec.evaluator import predict_bm25
-
     q = "CAT"
     pos = "CAT CAT CAT CAT "
     neg = "This is not it here either longer text"
     example = {"query": q, "positive": pos, "negative": neg}
-    example_output = predict_bm25(example, sample_model.tokenizer)
-    assert example_output["bm25_prediction"] == 1
-
-
-def test_bm25(sample_model):
-    from dkmodel2vec.evaluator import predict_bm25
-
-    q = "CAT"
-    pos = "CAT CAT CAT CAT "
-    neg = "This is not it here either longer text"
-    example = {"query": q, "positive": pos, "negative": neg}
-    example_output = predict_bm25(example, sample_model.tokenizer)
+    example_output = predict_bm25(example, sample_tokenizer)
     assert example_output["bm25_prediction"] == 1
 
 
@@ -409,3 +397,59 @@ def test_create_vocabulary():
     test_input = ["I like cats", "i LIKE likE CATS caTS CAts", "dogs"]
     vocab = create_vocabulary(test_input)
     assert vocab == ["cats", "like", "i", "dogs"]
+
+
+# def test_token_ordering():
+#     from model2vec.tokenizer.tokenizer import clean_and_create_vocabulary, replace_vocabulary
+#     from dkmodel2vec.vocab import lower_case_tokenizer
+#     from dkmodel2vec.distillation import estimate_token_frequencies, sort_tokens_by_frequency,calculate_weights
+#     tokenizer = AutoTokenizer.from_pretrained( "jealk/llm2vec-scandi-mntp-v2")
+#     tokenizer = lower_case_tokenizer(tokenizer)
+#     vocab = ["unlikelytokenforsure1", "unlikelytokenforsure2", "unlikelytokenforsure3"]
+#     corpus = ["unlikelytokenforsure1", "unlikelytokenforsure1 unlikelytokenforsure2 unlikelytokenforsure1 unlikelytokenforsure2 unlikelytokenforsure3"]
+#     backend_tokenizer = tokenizer.backend_tokenizer
+#     all_tokens, backend_tokenizer = clean_and_create_vocabulary(
+#     tokenizer, vocab, token_remove_regex=None
+#     )
+    
+#     backend_tokenizer_replaced_vocab = replace_vocabulary(
+#         backend_tokenizer,
+#         all_tokens, ",", "-"    )
+
+#     token_counts = estimate_token_frequencies(
+#             backend_tokenizer=backend_tokenizer_replaced_vocab,
+#             corpus_texts=corpus,
+#             batch_size=1000,
+#         )
+    
+
+#     assert 1 
+
+def test_calculate_weights():
+    from collections import Counter
+    from dkmodel2vec.distillation import calculate_weights
+
+    # Mock tokenizer with simple vocab
+    class MockTokenizer:
+        def get_vocab(self):
+            return {"hello": 0, "world": 1, "rare": 2}
+
+    tokenizer = MockTokenizer()
+
+    token_counts = Counter({0: 10, 1: 5})  # token ids as keys
+
+    weights = calculate_weights(tokenizer, token_counts)
+
+    assert len(weights) == 3  # Should have weights for all 3 tokens
+    assert all(w > 0 for w in weights.values())  # All weights should be positive
+    assert abs(sum(weights.values()) - 1.0) < 1e-6  # Should sum to 1
+    assert weights[2] == weights[1]  # Unseen token gets same weight as least frequent
+    assert weights[1] > weights[0]  # Less frequent tokens have higher weights
+
+def test_weight_embeddings():
+    from dkmodel2vec.distillation import weight_embeddings
+    
+    weights = {0: 1.0, 2: 0.1, 1: 0.01}
+    embeddings = np.ones((len(weights), 256) )
+    weighted_embeddings = weight_embeddings(weights = weights, embeddings=embeddings)
+    assert all([(weighted_embeddings[key]-value).sum()< 0.000001 for key, value in  weights.items()])

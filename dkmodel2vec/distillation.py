@@ -18,6 +18,7 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 import torch
+from dkmodel2vec.config import FALLBACK_UNK_TOKEN
 from torch.nn.utils.rnn import pad_sequence
 from dkmodel2vec.logging import log_memory_usage
 from model2vec.distill.inference import (
@@ -125,7 +126,7 @@ def distill_from_model_and_corpus(
 
     if unk_token is None:
         unk_token = cast(
-            Optional[str], [token for token in tokenizer.get_vocab() if token == ","][0]
+            Optional[str], [token for token in tokenizer.get_vocab() if token == FALLBACK_UNK_TOKEN][0]
         )
         logger.info(
             "The unknown token is not set. Hardcoding it. This is a workaround to allow encoding of more texts without error."
@@ -160,11 +161,11 @@ def distill_from_model_and_corpus(
             corpus_texts=corpus,
             batch_size=1000,
         )
-        sorted_all_tokens = sort_tokens_by_frequency(
-            token_counts=token_counts, all_tokens=all_tokens
-        )
-    else:
-        sorted_all_tokens = all_tokens
+#        sorted_all_tokens = sort_tokens_by_frequency(
+#            token_counts=token_counts, all_tokens=all_tokens
+#        )
+#    else:
+#        sorted_all_tokens = all_tokens
 
     logger.info(f"Creating embeddings for {len(all_tokens)} tokens")
 
@@ -175,7 +176,7 @@ def distill_from_model_and_corpus(
               Remember you will need an encoder without instructions as well.""")
 
     token_ids = turn_tokens_into_ids_with_instruction(
-        tokens=sorted_all_tokens,
+        tokens=all_tokens,
         base_tokenizer=tokenizer,
         unk_token=unk_token,
         instruction=instruction,
@@ -196,8 +197,9 @@ def distill_from_model_and_corpus(
     )
     log_memory_usage("Before weighing")
 
-    # Weigh each embedding with 1/freq, where freq is the count of each particular token
-    embeddings = weigh_by_freq(token_counts=token_counts, embeddings=embeddings)
+    weights = calculate_weights(backend_tokenizer_replaced_vocab, token_counts=token_counts)
+
+    embeddings = weight_embeddings(weights = weights, embeddings=embeddings)
 
     log_memory_usage("Before quantization")
 
@@ -312,7 +314,6 @@ def estimate_token_frequencies(
 
         corpus_texts = random.sample(list(corpus_texts), sample_size)
 
-    # Process in batches
     for i in range(0, len(corpus_texts), batch_size):
         batch = corpus_texts[i : i + batch_size]
 
@@ -326,16 +327,13 @@ def estimate_token_frequencies(
             continue
 
         try:
-            # Backend tokenizer encode_batch method
             encoded_batch = backend_tokenizer.encode_batch(batch_strings)
 
-            # Count all token IDs in batch
             for encoding in encoded_batch:
                 token_counts.update(encoding.ids)
 
         except Exception as e:
             logger.info(f"Error processing batch at index {i}: {e}")
-            # Fall back to individual processing for this batch
             for n, text in enumerate(batch_strings):
                 try:
                     encoding = backend_tokenizer.encode(text)
@@ -362,19 +360,28 @@ def sort_tokens_by_frequency(token_counts: Counter, all_tokens: list[Token]):
     ]
     return sorted_tokens
 
+def normalize_embeddings(embeddings: np.array): 
+    """Apply l2 normalization to embeddings. Add an infinitesimal to avoid dividing by zero. """
+    norms = np.linalg.norm(embeddings, axis = 1, keepdims=True)
+    return embeddings/(norms + 1e-12)
 
-def weigh_by_freq(embeddings: np.array, token_counts: Counter):
-    """Assuming embeddings ordered by token_count. Scale each embedding by frequency of token (word)."""
+def weight_embeddings(weights: dict[int, float], embeddings: np.array):
+    """Apply weighting in the order corresponding to the embeddings (sorted by token id). """
+    weights_sorted = [s[1] for s in sorted(weights.items(), key = lambda x: x[0])]
+    weights_array = np.array(weights_sorted).reshape(len(weights), 1)
+
+    return weights_array * embeddings
+
+def calculate_weights(backend_tokenizer: PreTrainedTokenizerFast, token_counts: Counter)->dict[int, float]:
+    """Calculate the weight of each token from token frequency. 
+    If there is no occurence of the token in token counts, then assume a maximum weight corresponding to the least frequent token. """
+    _, ids = zip(*sorted(backend_tokenizer.get_vocab().items(), key=lambda x: x[1]))
     total = token_counts.total()
-    weights_of_seen_tokens = np.asarray(
-        [total / count_n for _, count_n in token_counts.most_common()]
-    )
-    norm_weights = weights_of_seen_tokens / np.abs(np.max(weights_of_seen_tokens))
-    weights = np.ones(embeddings.shape[0], dtype=float)
-    weights[: norm_weights.shape[0]] = norm_weights
-    embeddings *= weights[:, None]
-    return embeddings
-
+    min_freq = token_counts.most_common()[-1][1]
+    weights = {id_n: total/token_counts.get(id_n, min_freq)  for id_n in ids}
+    norm_factor = sum(weights.values())
+    normalized_weights = {id_n : w/norm_factor for id_n, w in weights.items() }
+    return normalized_weights
 
 def create_embeddings_memory_efficient(
     model: PreTrainedModel,
@@ -400,11 +407,9 @@ def create_embeddings_memory_efficient(
     """
     model = model.to(device)
 
-    # Pre-allocate the final array (will be initialized after first batch)
     num_sequences = len(tokenized)
     out_weights = None
 
-    # Add token_type_ids only if the model supports it
     add_token_type_ids = "token_type_ids" in inspect.getfullargspec(model.forward).args
 
     # Sort by length for efficient batching
@@ -415,42 +420,80 @@ def create_embeddings_memory_efficient(
     pbar = tqdm(total=len(sorted_tokenized), desc="Encoding tokens", unit=" tokens")
 
     for batch_idx in range(0, len(sorted_tokenized), _DEFAULT_BATCH_SIZE):
+        batch_end = min(batch_idx + _DEFAULT_BATCH_SIZE, len(sorted_tokenized))
         batch = [
             torch.Tensor(x).long()
-            for x in sorted_tokenized[batch_idx : batch_idx + _DEFAULT_BATCH_SIZE]
+            for x in sorted_tokenized[batch_idx:batch_end]
         ]
+
+        # Skip empty batches
+        if not batch:
+            continue
 
         encoded = {}
         encoded["input_ids"] = pad_sequence(
             batch, batch_first=True, padding_value=pad_token_id
-        )
-        encoded["attention_mask"] = encoded["input_ids"] != pad_token_id
+        ).to(device)
+        encoded["attention_mask"] = (encoded["input_ids"] != pad_token_id).to(device)
 
         if add_token_type_ids:
-            encoded["token_type_ids"] = torch.zeros_like(encoded["input_ids"])
+            encoded["token_type_ids"] = torch.zeros_like(encoded["input_ids"]).to(device)
 
-        batch_embeddings = _encode_mean_using_model(model, encoded).numpy()
+        # Add error handling for the model forward pass
+        try:
+            batch_embeddings = _encode_mean_using_model(model, encoded).cpu().numpy()
+        except Exception as e:
+            logging.info(f"Error in model forward pass for batch {batch_idx}: {e}")
+            # Create dummy embeddings with NaNs for debugging
+            if out_weights is not None:
+                embedding_dim = out_weights.shape[1]
+                batch_embeddings = np.full((len(batch), embedding_dim), np.nan)
+            else:
+                # If this is the first batch and it fails, we can't continue
+                raise e
 
         if out_weights is None:
             embedding_dim = batch_embeddings.shape[1]
-            out_weights = np.empty(
-                (num_sequences, embedding_dim), dtype=batch_embeddings.dtype
+            out_weights = np.full(  # Use np.full instead of np.empty to initialize with NaN
+                (num_sequences, embedding_dim), np.nan, dtype=batch_embeddings.dtype
             )
 
         # Place each embedding directly in its final position
-        batch_start = batch_idx
-
         for i, embedding in enumerate(batch_embeddings):
             # Map from sorted position back to original position
-            sorted_idx = batch_start + i
+            sorted_idx = batch_idx + i
+            
+            # Add bounds checking
+            if sorted_idx >= len(sort_order):
+                logging.info(f"Warning: sorted_idx {sorted_idx} exceeds sort_order length {len(sort_order)}")
+                continue
+                
             original_idx = sort_order[sorted_idx]
+            
+            # Add bounds checking for original index
+            if original_idx >= num_sequences:
+                logging.info(f"Warning: original_idx {original_idx} exceeds num_sequences {num_sequences}")
+                continue
+                
+            # Check if embedding contains NaN values
+            if np.isnan(embedding).any():
+                logging.info(f"Warning: NaN values in embedding for original_idx {original_idx}, sorted_idx {sorted_idx}")
+            
             out_weights[original_idx] = embedding
 
         pbar.update(len(batch))
 
     pbar.close()
 
-    # Clean up any NaN values
+    # Check for any remaining NaN rows
+    nan_rows = np.isnan(out_weights).all(axis=1)
+    if nan_rows.any():
+        nan_indices = np.where(nan_rows)[0]
+        logger.info(f"Warning: {len(nan_indices)} rows still contain all NaN values: {nan_indices}")
+        
+        # Debug: check if these correspond to specific input sequences
+        for idx in nan_indices[:5]:  # Show first 5 for debugging
+            logger.info(f"NaN row {idx}: original sequence length = {len(tokenized[idx])}")
+    
     out_weights = np.nan_to_num(out_weights)
-
     return out_weights
