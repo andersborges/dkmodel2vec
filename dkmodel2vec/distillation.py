@@ -164,7 +164,8 @@ def distill_from_model_and_corpus(
 #        sorted_all_tokens = sort_tokens_by_frequency(
 #            token_counts=token_counts, all_tokens=all_tokens
 #        )
-#    else:
+    else:
+        token_counts = Counter()
 #        sorted_all_tokens = all_tokens
 
     logger.info(f"Creating embeddings for {len(all_tokens)} tokens")
@@ -217,7 +218,7 @@ def distill_from_model_and_corpus(
         "sif_coefficient": sif_coefficient,
         "hidden_dim": embeddings.shape[1],
         "seq_length": 1000000,  # Set this to a high value since we don't have a sequence length limit.
-        "normalize": True,
+        "normalize": False,
     }
 
     if os.path.exists(model_name):
@@ -377,11 +378,15 @@ def calculate_weights(backend_tokenizer: PreTrainedTokenizerFast, token_counts: 
     If there is no occurence of the token in token counts, then assume a maximum weight corresponding to the least frequent token. """
     _, ids = zip(*sorted(backend_tokenizer.get_vocab().items(), key=lambda x: x[1]))
     total = token_counts.total()
-    min_freq = token_counts.most_common()[-1][1]
+    if total == 0: 
+        min_freq = 1
+        total = 1
+    else: 
+        min_freq = token_counts.most_common()[-1][1]
     weights = {id_n: total/token_counts.get(id_n, min_freq)  for id_n in ids}
-    norm_factor = sum(weights.values())
-    normalized_weights = {id_n : w/norm_factor for id_n, w in weights.items() }
-    return normalized_weights
+#    norm_factor = sum(weights.values())
+#    normalized_weights = {id_n : w/norm_factor for id_n, w in weights.items() }
+    return weights
 
 def create_embeddings_memory_efficient(
     model: PreTrainedModel,
@@ -393,8 +398,8 @@ def create_embeddings_memory_efficient(
     Create output embeddings for a bunch of tokens using a pretrained model.
 
     This version is more memory efficient than the version in model2vec
-    because there are no duplicates of the embeddings. Instead the embeddings
-    are allocated directly in final sorted array in each batch.
+    because there are no duplicates generated. Instead the embeddings
+    are allocated directly in the final sorted array in each batch.
 
     It does a forward pass for all tokens passed in `tokens`.
 

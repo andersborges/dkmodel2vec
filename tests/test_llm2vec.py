@@ -453,3 +453,120 @@ def test_weight_embeddings():
     embeddings = np.ones((len(weights), 256) )
     weighted_embeddings = weight_embeddings(weights = weights, embeddings=embeddings)
     assert all([(weighted_embeddings[key]-value).sum()< 0.000001 for key, value in  weights.items()])
+
+
+
+    # test_debug_accuracy.py
+import pytest
+import numpy as np
+from datasets import Dataset
+from model2vec import StaticModel
+from dkmodel2vec.evaluator import compute_distances, evaluate_classification, evaluate_model
+from dkmodel2vec.models import LlamaModelWrapper
+from dkmodel2vec.distillation import distill_from_model_and_corpus
+from dkmodel2vec.constants import PREDICTION_COLUMN
+
+
+@pytest.fixture
+def debug_dataset():
+    """Create a simple dataset where positive should clearly be closer than negative."""
+    queries = [
+        "I love cats",
+        "Dogs are great pets", 
+        "Red apples are sweet"
+    ]
+    positives = [
+        "Cats are amazing animals",  # semantically similar to query
+        "I have a wonderful dog",    # semantically similar to query  
+        "Sweet red fruits"           # semantically similar to query
+    ]
+    negatives = [
+        "Mathematics is difficult",  # completely unrelated
+        "Space exploration",         # completely unrelated
+        "Computer programming"       # completely unrelated
+    ]
+    
+    dataset = Dataset.from_dict({
+        "query": queries,
+        "positive": positives, 
+        "negative": negatives,
+        "has_positive_and_negative": [True] * len(queries)
+    })
+    return dataset
+
+
+def test_debug_accuracy_with_known_good_model(debug_dataset):
+    """Test with a known working sentence transformer to verify our evaluation logic."""
+    from sentence_transformers import SentenceTransformer
+    
+    # Use a small but working sentence transformer
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    queries = debug_dataset["query"]
+    positives = debug_dataset["positive"] 
+    negatives = debug_dataset["negative"]
+    
+    # Encode all texts
+    query_embeds = model.encode(queries)
+    pos_embeds = model.encode(positives)
+    neg_embeds = model.encode(negatives)
+    
+    # Compute distances (same logic as your evaluator)
+    pos_distances = np.linalg.norm(query_embeds - pos_embeds, axis=1)
+    neg_distances = np.linalg.norm(query_embeds - neg_embeds, axis=1)
+    
+    print(f"Positive distances: {pos_distances}")
+    print(f"Negative distances: {neg_distances}")
+    print(f"Pos < Neg: {pos_distances < neg_distances}")
+    
+    # Make predictions
+    predictions = (pos_distances < neg_distances).astype(int)
+    
+    # Evaluate
+    results = evaluate_classification(predictions, np.ones_like(predictions))
+    
+    print(f"Accuracy with sentence transformer: {results['accuracy']}")
+    print(f"Predictions: {predictions}")
+    
+    # This should have reasonable accuracy (> 0.5) with our clear examples
+    assert results['accuracy'] > 0.5, f"Expected accuracy > 0.5, got {results['accuracy']}"
+
+
+def trained_embeddings_do_not_explode(tiny_fine_tuned_llm2vec_model):
+    """Test embeddings of words in the added vocabulary do not explode."""
+    
+    # Create the exact same setup as your main code
+    wrapped_model = LlamaModelWrapper(tiny_fine_tuned_llm2vec_model)
+    
+    # Simple test case
+    texts = ["hello world", "goodbye world", "testing"]
+    vocabulary = ["hello", "world", "goodbye", "testing"]
+    
+    # This mirrors your distill_from_model_and_corpus call
+    m2v_model = distill_from_model_and_corpus(
+        model=wrapped_model,
+        tokenizer=tiny_fine_tuned_llm2vec_model.tokenizer,
+        vocabulary=vocabulary,
+        corpus=texts,
+        pca_dims=256,
+    )
+    
+    # Test the exact evaluation pattern
+    dataset = Dataset.from_dict({
+        "query": ["hello", "apple"],
+        "positive": ["hello world", "apple pie"], 
+        "negative": ["goodbye", "pear"],
+        "has_positive_and_negative": [True, True]
+    })
+    
+    # Use your exact evaluation function
+    result_dataset = evaluate_model(
+        dataset=dataset,
+        model=m2v_model,
+        instruction_model=m2v_model,
+        log_perf=False  # Don't log to MLflow in test
+    )
+    
+    predictions = result_dataset[PREDICTION_COLUMN]
+    
+    assert all(p == 1 for p in predictions)

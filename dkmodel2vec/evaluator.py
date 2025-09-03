@@ -226,6 +226,7 @@ def evaluate_model(
     dataset: Dataset,
     model: StaticModel,
     instruction_model: StaticModel,
+    log_perf = True
 ) -> Dataset:
     """Run the complete evaluation on the subset of the test set that contains both positive and negative examples."""
 
@@ -241,7 +242,8 @@ def evaluate_model(
     results = evaluate_classification(
         predictions, ground_truth=np.ones_like(predictions)
     )
-    log_performance(results, log_prefix="raw")
+    if log_perf:
+        log_performance(results, log_prefix="raw")
 
     ##### LLM2VEC2MODEL2VEC WITH instructions
 
