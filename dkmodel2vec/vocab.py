@@ -89,7 +89,7 @@ def turn_tokens_into_ids_with_instruction(
     Convert a list of Token objects to their corresponding token ID sequences.
 
     :param tokens: List of Token objects to convert
-    :param base_tokenizer: The base tokenizer to use for converting tokens to IDs    
+    :param base_tokenizer: The base tokenizer to use for converting tokens to IDs
     :param unk_token: The string form of the unk token.
     :param instruction: Optional instruction to prepend to text before tokenization
     :return: List of token IDs corresponding to the input tokens
@@ -122,3 +122,39 @@ def turn_tokens_into_ids_with_instruction(
             token_ids.append(encoding_tokenizer.encode(token.form))
 
     return token_ids
+
+
+def turn_tokens_into_llm2mvec_input(
+    tokens: list[Token],
+    base_tokenizer: PreTrainedTokenizerFast,
+    unk_token: str | None,
+    instruction: str | None = None,
+) -> list[list[str]] | list[str]:
+    """
+    Convert a list of Token objects to their corresponding input for LLM2vec.
+
+    :param tokens: List of Token objects to convert
+    :param base_tokenizer: The base tokenizer to use for converting tokens to IDs
+    :param unk_token: The string form of the unk token.
+    :param instruction: Optional instruction to prepend to text before tokenization
+    :return: List of token IDs corresponding to the input tokens
+    """
+
+    unk_id = (
+        None if unk_token is None else base_tokenizer.convert_tokens_to_ids(unk_token)
+    )
+
+    token_sentences: list[list[str]] | list[str] = []
+    for token in tokens:
+        if token.is_internal:
+            # Careful. Any incorrect tokens will just get `[UNK]``, so this could go horribly wrong
+            token_id = base_tokenizer.convert_tokens_to_ids(token.form)
+            # Explicitly check and warn if `unk_id` appears, but don't crash.
+            if unk_id is not None and unk_id == token_id and token.form != unk_token:
+                logger.warning(f"Token {token.form} was set to unk. This is wrong.")
+        if instruction is None:
+            token_sentences.append(token.form)
+        else:
+            token_sentences.append([instruction, token.form])
+
+    return token_sentences

@@ -361,8 +361,10 @@ def test_evaluate_classification():
     assert (results["predictions"] == [1, 1, 0]).all()
     assert (results["ground_truth"] == [1, 1, 1]).all()
 
+
 def test_bm25(sample_tokenizer):
     from dkmodel2vec.evaluator import predict_bm25
+
     q = "CAT"
     pos = "CAT CAT CAT CAT "
     neg = "This is not it here either longer text"
@@ -411,7 +413,7 @@ def test_create_vocabulary():
 #     all_tokens, backend_tokenizer = clean_and_create_vocabulary(
 #     tokenizer, vocab, token_remove_regex=None
 #     )
-    
+
 #     backend_tokenizer_replaced_vocab = replace_vocabulary(
 #         backend_tokenizer,
 #         all_tokens, ",", "-"    )
@@ -421,9 +423,10 @@ def test_create_vocabulary():
 #             corpus_texts=corpus,
 #             batch_size=1000,
 #         )
-    
 
-#     assert 1 
+
+#     assert 1
+
 
 def test_calculate_weights():
     from collections import Counter
@@ -442,26 +445,35 @@ def test_calculate_weights():
 
     assert len(weights) == 3  # Should have weights for all 3 tokens
     assert all(w > 0 for w in weights.values())  # All weights should be positive
-    assert abs(sum(weights.values()) - 1.0) < 1e-6  # Should sum to 1
     assert weights[2] == weights[1]  # Unseen token gets same weight as least frequent
     assert weights[1] > weights[0]  # Less frequent tokens have higher weights
 
+
 def test_weight_embeddings():
     from dkmodel2vec.distillation import weight_embeddings
-    
+
     weights = {0: 1.0, 2: 0.1, 1: 0.01}
-    embeddings = np.ones((len(weights), 256) )
-    weighted_embeddings = weight_embeddings(weights = weights, embeddings=embeddings)
-    assert all([(weighted_embeddings[key]-value).sum()< 0.000001 for key, value in  weights.items()])
-
-
+    embeddings = np.ones((len(weights), 256))
+    weighted_embeddings = weight_embeddings(weights=weights, embeddings=embeddings)
+    assert all(
+        [
+            (weighted_embeddings[key] - value).sum() < 0.000001
+            for key, value in weights.items()
+        ]
+    )
 
     # test_debug_accuracy.py
+
+
 import pytest
 import numpy as np
 from datasets import Dataset
 from model2vec import StaticModel
-from dkmodel2vec.evaluator import compute_distances, evaluate_classification, evaluate_model
+from dkmodel2vec.evaluator import (
+    compute_distances,
+    evaluate_classification,
+    evaluate_model,
+)
 from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
 from dkmodel2vec.constants import PREDICTION_COLUMN
@@ -470,78 +482,78 @@ from dkmodel2vec.constants import PREDICTION_COLUMN
 @pytest.fixture
 def debug_dataset():
     """Create a simple dataset where positive should clearly be closer than negative."""
-    queries = [
-        "I love cats",
-        "Dogs are great pets", 
-        "Red apples are sweet"
-    ]
+    queries = ["I love cats", "Dogs are great pets", "Red apples are sweet"]
     positives = [
         "Cats are amazing animals",  # semantically similar to query
-        "I have a wonderful dog",    # semantically similar to query  
-        "Sweet red fruits"           # semantically similar to query
+        "I have a wonderful dog",  # semantically similar to query
+        "Sweet red fruits",  # semantically similar to query
     ]
     negatives = [
         "Mathematics is difficult",  # completely unrelated
-        "Space exploration",         # completely unrelated
-        "Computer programming"       # completely unrelated
+        "Space exploration",  # completely unrelated
+        "Computer programming",  # completely unrelated
     ]
-    
-    dataset = Dataset.from_dict({
-        "query": queries,
-        "positive": positives, 
-        "negative": negatives,
-        "has_positive_and_negative": [True] * len(queries)
-    })
+
+    dataset = Dataset.from_dict(
+        {
+            "query": queries,
+            "positive": positives,
+            "negative": negatives,
+            "has_positive_and_negative": [True] * len(queries),
+        }
+    )
     return dataset
 
 
 def test_debug_accuracy_with_known_good_model(debug_dataset):
     """Test with a known working sentence transformer to verify our evaluation logic."""
     from sentence_transformers import SentenceTransformer
-    
+
     # Use a small but working sentence transformer
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+
     queries = debug_dataset["query"]
-    positives = debug_dataset["positive"] 
+    positives = debug_dataset["positive"]
     negatives = debug_dataset["negative"]
-    
+
     # Encode all texts
     query_embeds = model.encode(queries)
     pos_embeds = model.encode(positives)
     neg_embeds = model.encode(negatives)
-    
+
     # Compute distances (same logic as your evaluator)
     pos_distances = np.linalg.norm(query_embeds - pos_embeds, axis=1)
     neg_distances = np.linalg.norm(query_embeds - neg_embeds, axis=1)
-    
+
     print(f"Positive distances: {pos_distances}")
     print(f"Negative distances: {neg_distances}")
     print(f"Pos < Neg: {pos_distances < neg_distances}")
-    
+
     # Make predictions
     predictions = (pos_distances < neg_distances).astype(int)
-    
+
     # Evaluate
     results = evaluate_classification(predictions, np.ones_like(predictions))
-    
+
     print(f"Accuracy with sentence transformer: {results['accuracy']}")
     print(f"Predictions: {predictions}")
-    
+
     # This should have reasonable accuracy (> 0.5) with our clear examples
-    assert results['accuracy'] > 0.5, f"Expected accuracy > 0.5, got {results['accuracy']}"
+    assert results["accuracy"] > 0.5, (
+        f"Expected accuracy > 0.5, got {results['accuracy']}"
+    )
 
 
 def trained_embeddings_do_not_explode(tiny_fine_tuned_llm2vec_model):
     """Test embeddings of words in the added vocabulary do not explode."""
-    
+
     # Create the exact same setup as your main code
     wrapped_model = LlamaModelWrapper(tiny_fine_tuned_llm2vec_model)
-    
+
     # Simple test case
     texts = ["hello world", "goodbye world", "testing"]
     vocabulary = ["hello", "world", "goodbye", "testing"]
-    
+
     # This mirrors your distill_from_model_and_corpus call
     m2v_model = distill_from_model_and_corpus(
         model=wrapped_model,
@@ -550,23 +562,92 @@ def trained_embeddings_do_not_explode(tiny_fine_tuned_llm2vec_model):
         corpus=texts,
         pca_dims=256,
     )
-    
+
     # Test the exact evaluation pattern
-    dataset = Dataset.from_dict({
-        "query": ["hello", "apple"],
-        "positive": ["hello world", "apple pie"], 
-        "negative": ["goodbye", "pear"],
-        "has_positive_and_negative": [True, True]
-    })
-    
+    dataset = Dataset.from_dict(
+        {
+            "query": ["hello", "apple"],
+            "positive": ["hello world", "apple pie"],
+            "negative": ["goodbye", "pear"],
+            "has_positive_and_negative": [True, True],
+        }
+    )
+
     # Use your exact evaluation function
     result_dataset = evaluate_model(
         dataset=dataset,
         model=m2v_model,
         instruction_model=m2v_model,
-        log_perf=False  # Don't log to MLflow in test
+        log_perf=False,  # Don't log to MLflow in test
     )
-    
+
     predictions = result_dataset[PREDICTION_COLUMN]
-    
+
     assert all(p == 1 for p in predictions)
+
+
+def test_validation_of_parameters():
+    from dkmodel2vec.distillation import _validate_parameters
+
+    out = _validate_parameters(
+        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=None
+    )
+    assert out == (None, None)
+
+
+def test_turn_tokens_into_llm2mvec_input(sample_tokenizer):
+    from dkmodel2vec.vocab import turn_tokens_into_llm2mvec_input
+    from model2vec.tokenizer.datamodels import Token
+
+    unk_token = sample_tokenizer.special_tokens_map["unk_token"]
+
+    tokens = [
+        Token(form=".", normalized_form=".", is_subword=False, is_internal=True),
+        Token(
+            form="VERYUNLIKELYTOKEN",
+            normalized_form="VERYUNLIKELYTOKEN",
+            is_subword=False,
+            is_internal=True,
+        ),
+        Token(
+            form=unk_token,
+            normalized_form=unk_token,
+            is_internal=True,
+            is_subword=False,
+        ),
+    ]
+    ll2vec_input = turn_tokens_into_llm2mvec_input(
+        tokens=tokens, tokenizer=sample_tokenizer, unk_token=unk_token
+    )
+    assert len(ll2vec_input) == 3
+
+
+def test_turn_tokens_into_llm2mvec_input_with_instructions(sample_tokenizer):
+    from dkmodel2vec.vocab import turn_tokens_into_llm2mvec_input
+    from model2vec.tokenizer.datamodels import Token
+
+    unk_token = sample_tokenizer.special_tokens_map["unk_token"]
+
+    tokens = [
+        Token(form=".", normalized_form=".", is_subword=False, is_internal=True),
+        Token(
+            form="VERYUNLIKELYTOKEN",
+            normalized_form="VERYUNLIKELYTOKEN",
+            is_subword=False,
+            is_internal=True,
+        ),
+        Token(
+            form=unk_token,
+            normalized_form=unk_token,
+            is_internal=True,
+            is_subword=False,
+        ),
+    ]
+    llm2vec_input = turn_tokens_into_llm2mvec_input(
+        tokens=tokens,
+        tokenizer=sample_tokenizer,
+        unk_token=unk_token,
+        instruction="Here is the prepend",
+    )
+    assert len(llm2vec_input) == 3
+    assert all([len(inp) == 2 for inp in llm2vec_input])

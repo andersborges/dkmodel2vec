@@ -18,7 +18,14 @@ from rank_bm25 import BM25Okapi
 from tokenizers import Tokenizer
 from sentence_transformers import SentenceTransformer
 from dkmodel2vec.config import BEST_SENTENCE_TRANSFORMER
-from dkmodel2vec.constants import PREDICTION_COLUMN, BM25_PREDICTION_COLUMN, DATASET_NEGATIVE_COLUMN, DATASET_POSITIVE_COLUMN, DATASET_QUERY_COLUMN, DATASET_COLUMNS_FOR_TEXT
+from dkmodel2vec.constants import (
+    PREDICTION_COLUMN,
+    BM25_PREDICTION_COLUMN,
+    DATASET_NEGATIVE_COLUMN,
+    DATASET_POSITIVE_COLUMN,
+    DATASET_QUERY_COLUMN,
+    DATASET_COLUMNS_FOR_TEXT,
+)
 
 from logging import getLogger
 
@@ -64,10 +71,13 @@ def predict_bm25(example: dict, tokenizer: Tokenizer) -> np.array:
 
     return example
 
+
 def predict_sentence_transformer_cos_sim(
-    batch: dict, sentence_transformer: SentenceTransformer, out_column:str = "sentence_transformer_pred"
+    batch: dict,
+    sentence_transformer: SentenceTransformer,
+    out_column: str = "sentence_transformer_pred",
 ) -> dict:
-    """Predict the most similar document index (0 or 1) using cosine similarity. """
+    """Predict the most similar document index (0 or 1) using cosine similarity."""
     # Convert to numpy arrays for boolean indexing
     queries = batch[DATASET_QUERY_COLUMN]
     positives = batch[DATASET_POSITIVE_COLUMN]
@@ -84,17 +94,20 @@ def predict_sentence_transformer_cos_sim(
     neg_similarities = np.sum(query_embeds * neg_embeds, axis=1) / (
         np.linalg.norm(query_embeds, axis=1) * np.linalg.norm(neg_embeds, axis=1)
     )
-    
+
     # Higher cosine similarity means more similar (opposite of distance)
     predictions = (pos_similarities > neg_similarities).astype(int)
 
     batch[out_column] = predictions.tolist()
     return batch
 
+
 def predict_sentence_transformer(
-    batch: dict, sentence_transformer: SentenceTransformer, out_column:str = "sentence_transformer_pred"
+    batch: dict,
+    sentence_transformer: SentenceTransformer,
+    out_column: str = "sentence_transformer_pred",
 ) -> dict:
-    """Predict the most similar document index (0 or 1) using model with .encode method. """
+    """Predict the most similar document index (0 or 1) using model with .encode method."""
     # Convert to numpy arrays for boolean indexing
     queries = batch[DATASET_QUERY_COLUMN]
     positives = batch[DATASET_POSITIVE_COLUMN]
@@ -223,10 +236,7 @@ def log_performance(results: dict, log_prefix: str = ""):
 
 
 def evaluate_model(
-    dataset: Dataset,
-    model: StaticModel,
-    instruction_model: StaticModel,
-    log_perf = True
+    dataset: Dataset, model: StaticModel, instruction_model: StaticModel, log_perf=True
 ) -> Dataset:
     """Run the complete evaluation on the subset of the test set that contains both positive and negative examples."""
 
@@ -245,24 +255,24 @@ def evaluate_model(
     if log_perf:
         log_performance(results, log_prefix="raw")
 
-    ##### LLM2VEC2MODEL2VEC WITH instructions
+    #### LLM2VEC2MODEL2VEC WITH instructions
 
-    # logger.info("Computing similarities with documents using instructions...")
-    # pos_dists, neg_dists = compute_distances(
-    #     encoder=model, instruction_encoder=instruction_model, dataset=dataset
-    # )
+    logger.info("Computing similarities with documents using instructions...")
+    pos_dists, neg_dists = compute_distances(
+        encoder=model, instruction_encoder=instruction_model, dataset=dataset
+    )
 
-    # logger.info("Evaluating classification performance...")
-    # # Classification: positive class if pos_distance < neg_distance
-    # predictions_with_instruct = (pos_dists < neg_dists).astype(int)
-    # dataset = dataset.add_column(
-    #     "prediction_with_instruction", predictions_with_instruct
-    # )
+    logger.info("Evaluating classification performance...")
+    # Classification: positive class if pos_distance < neg_distance
+    predictions_with_instruct = (pos_dists < neg_dists).astype(int)
+    dataset = dataset.add_column(
+        "prediction_with_instruction", predictions_with_instruct
+    )
 
-    # results = evaluate_classification(
-    #     predictions_with_instruct, ground_truth=np.ones_like(predictions_with_instruct)
-    # )
-    # log_performance(results, log_prefix="instruct")
+    results = evaluate_classification(
+        predictions_with_instruct, ground_truth=np.ones_like(predictions_with_instruct)
+    )
+    log_performance(results, log_prefix="instruct")
     return dataset
 
 
@@ -279,12 +289,14 @@ def evaluate_bm25(dataset: Dataset):
 def evaluate_sentence_transformer(
     dataset: Dataset, model_name: str = BEST_SENTENCE_TRANSFORMER
 ) -> Dataset:
-    """Add predictions as seperate column in dataset and log performance. """
+    """Add predictions as seperate column in dataset and log performance."""
     logger.info("Computing scores with sentence transformer model... ")
     sentence_transformer = load_sentence_transformer(model_name)
     out_column_name = model_name
     dataset = dataset.map(
-        lambda batch: predict_sentence_transformer(batch, sentence_transformer,out_column=out_column_name),
+        lambda batch: predict_sentence_transformer(
+            batch, sentence_transformer, out_column=out_column_name
+        ),
         batched=True,
         batch_size=16384,
     )
@@ -302,14 +314,12 @@ def evaluate_sentence_transformer(
     return dataset
 
 
-def evaluate_ensemble_model(dataset: Dataset, column_names : list[str]):
+def evaluate_ensemble_model(dataset: Dataset, column_names: list[str]):
     """Evaluate and log performance of ensemble model. The prediction of the ensemble "
     is simply the majority of the three columns in the dataset."""
-    
+
     logger.info("Computing ensemble prediction")
-    all_predictions = np.array(
-        [ dataset[c] for c in column_names]
-    )
+    all_predictions = np.array([dataset[c] for c in column_names])
     ensemble_predictions = (all_predictions.sum(axis=0) >= 2).astype(int)
     ensemble_results = evaluate_classification(
         ensemble_predictions, ground_truth=np.ones_like(ensemble_predictions)

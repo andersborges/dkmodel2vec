@@ -1,12 +1,19 @@
 from datasets import load_dataset, DatasetDict, Dataset
 
 from dkmodel2vec.config import E5_EMBED_INSTRUCTION, DANISH_INSTRUCTION
-from dkmodel2vec.constants import HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN, DATASET_QUERY_COLUMN,DATASET_NEGATIVE_COLUMN, DATASET_POSITIVE_COLUMN
+from dkmodel2vec.constants import (
+    HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN,
+    DATASET_QUERY_COLUMN,
+    DATASET_NEGATIVE_COLUMN,
+    DATASET_POSITIVE_COLUMN,
+)
+
 
 def has_positive_and_negative(example: dict) -> dict:
     """Flag examples which have both a positive and negative example."""
     example[HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN] = (
-        example[DATASET_POSITIVE_COLUMN] is not None and example[DATASET_NEGATIVE_COLUMN] is not None
+        example[DATASET_POSITIVE_COLUMN] is not None
+        and example[DATASET_NEGATIVE_COLUMN] is not None
     )
     return example
 
