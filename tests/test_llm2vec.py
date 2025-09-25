@@ -588,11 +588,14 @@ def trained_embeddings_do_not_explode(tiny_fine_tuned_llm2vec_model):
 
 def test_validation_of_parameters():
     from dkmodel2vec.distillation import _validate_parameters
+    token_remove_pattern = r"\[unused\d+\]|\b\w*[A-Z]\w*\b"
 
-    out = _validate_parameters(
-        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=None
+    sif_coefficient, token_remove_regex = _validate_parameters(
+        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
     )
-    assert out == (None, None)
+
+    assert sif_coefficient is None
+    assert token_remove_regex
 
 
 def test_turn_tokens_into_llm2mvec_input(sample_tokenizer):
@@ -651,3 +654,80 @@ def test_turn_tokens_into_llm2mvec_input_with_instructions(sample_tokenizer):
     )
     assert len(llm2vec_input) == 3
     assert all([len(inp) == 2 for inp in llm2vec_input])
+
+def test_strip_upper_case():
+    from dkmodel2vec.distillation import _validate_parameters
+    from model2vec.tokenizer import clean_and_create_vocabulary
+
+    token_remove_pattern = r"\[unused\d+\]"
+    word_contains_upper_case_pattern = r"\b\w*[A-Z]\w*\b"
+    token_remove_pattern = r"|".join([token_remove_pattern,word_contains_upper_case_pattern] )
+    
+    sif_coefficient, token_remove_regex = _validate_parameters(
+        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+    )
+    tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
+    vocabulary = ["kongen", "konger"]
+    
+    all_tokens, backend_tokenizer = clean_and_create_vocabulary(
+        tokenizer, vocabulary, token_remove_regex=token_remove_regex
+    )
+
+    assert len([t for t in all_tokens if token_remove_regex.match(t.form) ]) == 0
+    positives = ["kfaK", "KKK", "Mkjl", "ĠkfaK"] # should get matched
+    negatives = ["Ġkfa", "kkk", "æ"] # should NOT get matched
+    assert len([t for t in positives if token_remove_regex.match(t) ]) == len(positives) 
+    assert len([t for t in negatives if token_remove_regex.match(t) ]) ==0
+
+def test_strip_exotic():
+    from dkmodel2vec.distillation import _validate_parameters
+    from model2vec.tokenizer import clean_and_create_vocabulary
+
+    token_remove_pattern = r"\[unused\d+\]"
+    word_contains_upper_case_pattern = r"\b\w*[A-Z]\w*\b"
+    # Match tokens with exotic chars, except 'Ġ' and '#' followed by only normal chars
+    contains_exotic_token_pattern = r'^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]'
+    token_remove_pattern = r"|".join([token_remove_pattern,word_contains_upper_case_pattern, contains_exotic_token_pattern] )
+
+    sif_coefficient, token_remove_regex = _validate_parameters(
+        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+    )
+    tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
+    vocabulary = ["kongen", "konger"]
+    
+    all_tokens, backend_tokenizer = clean_and_create_vocabulary(
+        tokenizer, vocabulary, token_remove_regex=token_remove_regex
+    )
+    matches = [t for t in all_tokens if token_remove_regex.match(t.form) ]
+    assert len(matches) == 0
+    positives = ["hello!",       # Contains ! (not normal) - MATCH
+        "test@email",   # Contains @ (not normal) - MATCH  
+        "café™",        # Contains ™ (not normal) - MATCH
+        "Ġhello!", # contains ! - Match
+        "Ġtest@email",  # contains @ - Match
+        "#unlikelytoken___", # contains ___ - MATCH
+        "#en" #contains # which is not an indicator of a continued word in BPE - So it should MATCH
+
+    ]
+    negatives = [
+        "<|end_of_text|>", # special case
+        "Ġhello", # starts with Ġ, rest are normal
+        "hello",        # All normal - no match
+        "hello world",  # Contains space (normal) - no match
+        "hello123",     # All normal - no match
+        "æøå",  # All normal - no match
+        ]        
+
+    assert len([t for t in positives if token_remove_regex.match(t) ]) == len(positives) 
+    assert len([t for t in negatives if token_remove_regex.match(t) ]) ==0
+
+def test_reduce_dimensions():
+    from dkmodel2vec.distillation import reduce_dimensions
+    from collections import Counter
+    np.random.seed(79)
+    embeddings = np.random.random((100, 10))
+    counts = {0: 1, 3: 5, 5: 0 , 10: 10}
+    token_counts = Counter(counts)
+    pca_dims = 2
+    reduced_embeds = reduce_dimensions(embeddings=embeddings, pca_dims=pca_dims, token_counts = token_counts)
+    assert reduced_embeds.shape == (embeddings.shape[0], pca_dims) 

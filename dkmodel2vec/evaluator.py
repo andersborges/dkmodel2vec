@@ -17,15 +17,16 @@ from datasets import DatasetDict, Dataset
 from rank_bm25 import BM25Okapi
 from tokenizers import Tokenizer
 from sentence_transformers import SentenceTransformer
-from dkmodel2vec.config import BEST_SENTENCE_TRANSFORMER
+from dkmodel2vec.config import BEST_SENTENCE_TRANSFORMER, DANISH_INSTRUCTION
 from dkmodel2vec.constants import (
     PREDICTION_COLUMN,
     BM25_PREDICTION_COLUMN,
     DATASET_NEGATIVE_COLUMN,
     DATASET_POSITIVE_COLUMN,
     DATASET_QUERY_COLUMN,
-    DATASET_COLUMNS_FOR_TEXT,
+    LLM2VEC_PREDICTION_COLUMN
 )
+from llm2vec.llm2vec import LLM2Vec
 
 from logging import getLogger
 
@@ -101,6 +102,28 @@ def predict_sentence_transformer_cos_sim(
     batch[out_column] = predictions.tolist()
     return batch
 
+def predict_llm2vec(
+    batch: dict,
+    model: LLM2Vec,
+    out_column: str = LLM2VEC_PREDICTION_COLUMN,
+) -> dict:
+    """Predict the most similar document index (0 or 1) using model with .encode method."""
+    queries = batch[DATASET_QUERY_COLUMN]
+    positives = batch[DATASET_POSITIVE_COLUMN]
+    negatives = batch[DATASET_NEGATIVE_COLUMN]
+
+    instructions = len(queries)*[DANISH_INSTRUCTION]
+
+    query_embeds = model.encode([[inst_n, q_n] for inst_n, q_n in zip(instructions, queries)])
+    pos_embeds = model.encode(positives)
+    neg_embeds = model.encode(negatives)
+
+    pos_distances = np.linalg.norm(query_embeds - pos_embeds, axis=1)
+    neg_distances = np.linalg.norm(query_embeds - neg_embeds, axis=1)
+    predictions = (pos_distances < neg_distances).astype(int)
+
+    batch[out_column] = predictions.tolist()
+    return batch
 
 def predict_sentence_transformer(
     batch: dict,
@@ -277,7 +300,7 @@ def evaluate_model(
 
 
 def evaluate_bm25(dataset: Dataset):
-    #### BM25 performance
+    """BM25 performance with frequencies from positive and negative pair. """
     predictions = np.array(dataset[BM25_PREDICTION_COLUMN])
     bm25_results = evaluate_classification(
         predictions, ground_truth=np.ones_like(predictions)
@@ -285,6 +308,37 @@ def evaluate_bm25(dataset: Dataset):
     log_performance(bm25_results, log_prefix="bm25")
     return
 
+def evaluate_full_bm25(dataset: Dataset):
+    """BM25 performance with frequencies from all positive and negative pairs."""
+    # TODO: Work in progress
+    predictions = np.array(dataset[BM25_PREDICTION_COLUMN])
+    bm25_results = evaluate_classification(
+        predictions, ground_truth=np.ones_like(predictions)
+    )
+    log_performance(bm25_results, log_prefix="bm25")
+    return
+
+def evaluate_llm2vec_model(dataset: Dataset, model: LLM2Vec)->Dataset:
+    """Add predictions for raw llm2vec model as seperate column in dataset and log performance."""
+    logger.info("Computing scores with raw llm2vec model... ")
+    dataset = dataset.map(
+        lambda batch: predict_llm2vec(
+            batch, model
+        ),
+        batched=True,
+        batch_size=100,
+    )
+    predictions = dataset[LLM2VEC_PREDICTION_COLUMN]
+
+    results = evaluate_classification(
+        predictions,
+        ground_truth=np.ones_like(predictions),
+    )
+    log_performance(
+        results,
+        log_prefix="LLM2Vec",
+    )
+    return dataset
 
 def evaluate_sentence_transformer(
     dataset: Dataset, model_name: str = BEST_SENTENCE_TRANSFORMER

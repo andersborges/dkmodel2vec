@@ -1,5 +1,6 @@
 PREDICTION_COLUMN = "prediction"
 BM25_PREDICTION_COLUMN = "bm25_prediction"
+LLM2VEC_PREDICTION_COLUMN = "llm2vec_prediction"
 DATASET_QUERY_COLUMN = "query"
 DATASET_POSITIVE_COLUMN = "positive"
 DATASET_NEGATIVE_COLUMN = "negative"
