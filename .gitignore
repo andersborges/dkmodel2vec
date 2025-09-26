@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Models from training
+scripts/models/
+
 # C extensions
 *.so
 
