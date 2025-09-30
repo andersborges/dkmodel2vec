@@ -25,7 +25,12 @@ uv sync
 
 ```bash
 # Install the local package
-uv pip install -e . 
+
+# On machines with GPU
+uv pip install -e ".[gpu]"
+
+# On CPU-only machines
+uv pip install -e ".[cpu]"
 ```
 ## Usage
 To train the model you will probably want a GPU to perform inference on the many tokens. 

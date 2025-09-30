@@ -3,14 +3,17 @@ name = "dkmodel2vec"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "accelerate>=1.7.0",
     "anywidget>=0.9.18",
+    "bm25s>=0.2.14",
     "boto3>=1.40.26",
     "datasets>=3.6.0",
     "embedding-atlas>=0.10.0",
+    "faiss-cpu>=1.12.0",
     "ipykernel>=6.29.5",
+    "ipython>=8.37.0",
     "llm2vec==0.2.3",
     "mlflow>=3.3.1",
     "model2vec==0.6",
@@ -35,4 +38,12 @@ llm2vec = { git = "https://github.com/andersborges/llm2vec.git" }
 [dependency-groups]
 dev = [
     "ruff>=0.12.0",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "faiss-gpu",
+]
+cpu = [
+    "faiss-cpu",
 ]
