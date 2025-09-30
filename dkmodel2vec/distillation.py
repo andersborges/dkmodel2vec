@@ -410,6 +410,7 @@ def reduce_dimensions(embeddings: np.array, pca_dims: int | None, token_counts: 
                 orig_dims = embeddings.shape[1]
 
                 p = PCA(n_components=pca_dims, svd_solver="full")
+                logger.info(f"Fitting with subspace of shape {used_subspace.shape}. There are {embeddings.shape[0]} tokens in total. There are {used_subspace.shape[0]} tokens with finite counts. ")
                 p.fit(used_subspace)
                 reduced_embeddings = p.transform(embeddings)
 

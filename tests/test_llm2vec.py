@@ -731,3 +731,27 @@ def test_reduce_dimensions():
     pca_dims = 2
     reduced_embeds = reduce_dimensions(embeddings=embeddings, pca_dims=pca_dims, token_counts = token_counts)
     assert reduced_embeds.shape == (embeddings.shape[0], pca_dims) 
+
+
+# def test_add_embeddings():
+#     from dkmodel2vec.distillation import reduce_dimensions
+#     from collections import Counter
+#     np.random.seed(79)
+#     embeddings = np.random.random((100, 10))
+#     counts = {0: 1, 3: 5, 5: 0 , 10: 10}
+#     token_counts = Counter(counts)
+#     pca_dims = 2
+#     reduced_embeds = reduce_dimensions(embeddings=embeddings, pca_dims=pca_dims, token_counts = token_counts)
+#     assert reduced_embeds.shape == (embeddings.shape[0], pca_dims) 
+
+def test_create_corpus():
+    from dkmodel2vec.retrieval import create_corpus
+    raw = {
+        "idx": [0, 1,2,2], 
+        "positive": ["hallo", None, "hej"], 
+        "negative" : [None, "no", "nix"]}
+    corpus = create_corpus(raw, columns = ["positive", "negative"])
+    long_form = {"query_idx" : [0,1, 2,2 ],
+                  "document" : ["hallo", "no", "hej", "nix"], 
+                  "column" : ["positive", "negative", "positive", "negative"]}
+    assert corpus == long_form

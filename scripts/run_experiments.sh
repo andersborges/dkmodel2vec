@@ -57,11 +57,19 @@ echo ""
 #python scripts/hyperparams.py --output-dim 256 --ignore-external-tokens
 
 # Normalized and different values of SIF
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.01 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000 
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.01 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000 
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 200000
 
+# # Normalized and different values of SIF but where vocab size is 150k to avoid running out of memory
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.01 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000
+
+# # train on full dataset
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset
 
 
 
