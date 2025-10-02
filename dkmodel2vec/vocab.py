@@ -6,7 +6,7 @@ from tqdm import tqdm
 import pandas as pd
 from tokenizers import normalizers
 import copy
-
+from nltk.stem import SnowballStemmer 
 from model2vec.tokenizer.tokenizer import find_eos_bos
 from typing import cast
 
@@ -15,6 +15,8 @@ from tokenizers import Tokenizer
 from transformers import PreTrainedTokenizerFast
 
 from model2vec.tokenizer.datamodels import Token
+from dkmodel2vec.constants import STEMMER_LANGUAGE
+from dkmodel2vec.config import STEM
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,15 +33,40 @@ def tokenize_by_word(texts: list[str]) -> Counter:
 
     return tokens
 
-
-def create_vocabulary(texts: list[str], vocab_size=VOCAB_SIZE) -> list[str]:
-    """Create the vocabulary that is used as input to distillation. Vocabulary size is limited to VOCAB_SIZE"""
+def create_vocabulary(
+    texts: list[str], 
+    vocab_size: int = VOCAB_SIZE,
+    stem: bool = STEM,
+    stemmer_language: str = STEMMER_LANGUAGE
+) -> list[str]:
+    """
+    Create the vocabulary that is used as input to distillation. 
+    Vocabulary size is limited to vocab_size.
+    
+    Args:
+        texts: List of text strings to build vocabulary from
+        vocab_size: Maximum vocabulary size
+        stem: Whether to apply stemming before counting
+        stemmer_language: Language for stemmer (if stem=True)
+    
+    Returns:
+        List of vocabulary tokens
+    """
     logger.info("Creating vocabulary")
     words = tokenize_by_word(texts)
+    
+    if stem:
+        stemmer = SnowballStemmer(stemmer_language)
+        words = [stemmer.stem(word) for word in words]
+    
     word_counts = Counter(words)
     vocabulary = [word for word, _ in word_counts.most_common(vocab_size)]
-    return vocabulary
+    if stem and len(vocabulary) < vocab_size:
+        logger.info(f"Vocabulary reduced to {len(vocabulary)} tokens after stemming (requested: {vocab_size})")
+    else:
+        logger.info(f"Vocabulary created with {len(vocabulary)} tokens")
 
+    return vocabulary
 
 def lower_case_tokenizer(tokenizer: Tokenizer) -> Tokenizer:
     """Modify the normalizer to lower-case any text before tokenizing. This reduces vocab size."""

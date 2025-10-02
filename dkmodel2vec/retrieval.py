@@ -23,7 +23,7 @@ def create_corpus(examples: dict, columns:list[str] = [constants.DATASET_POSITIV
                 }
     return long_form
 
-def get_mapping_from_query_to_corpus(flat_corpus):
+def get_mapping_from_query_to_corpus(flat_corpus:Dataset):
     """Get mapping between query and corpus for positive examples."""
     query_idx_to_corpus_idx = {}
     for corpus_idx, row in enumerate(flat_corpus):
@@ -39,22 +39,22 @@ def add_corpus_idx(example: dict, query_idx_to_corpus_idx: dict[int, int]):
 
 
 def add_embeddings(examples: dict, model:SentenceTransformer)->dict:
-
+    """Add embeddings to example."""
     examples['embeddings'] = model.encode(examples['query'])
     return examples
 
-def retrieve(query_examples: dict[str, list], index: Any, top_k: int = 30) -> dict:
+def retrieve(query_examples: dict[str, list], index: Any, top_k: int = 30, index_name: str = "m2v") -> dict:
     """Perform batch retrieval for queries on index."""
     queries = np.array(query_examples["embeddings"]).astype(np.float32)
     scores, retrieved_examples = index.get_nearest_examples_batch(
-        index_name="m2v", 
+        index_name=index_name,  # ← Use the parameter instead of hardcoded "m2v"
         queries=queries,
         k=top_k
     )
     
     result = query_examples.copy()
     result['retrieved_scores'] = scores 
-    result['retrieved_document_idx'] = [d['query_idx'] for d in retrieved_examples]
+    result['retrieved_document_idx'] = [d['idx'] for d in retrieved_examples]
     result['retrieved_column_name']= [d['column'] for d in retrieved_examples]
 
     return result

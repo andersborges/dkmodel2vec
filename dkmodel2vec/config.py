@@ -14,3 +14,4 @@ N_SPLITS = 10
 RANDOM_STATE = 51
 NORMALIZE_EMBEDDINGS = False # settings for final model2vec model, you can also change setting in model 
 FOCUS_PCA = False
+STEM = False

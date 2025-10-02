@@ -25,15 +25,14 @@ from dkmodel2vec.config import (
     SIF_COEFFICIENT,
     RANDOM_STATE, 
     NORMALIZE_EMBEDDINGS, 
-    FOCUS_PCA
+    FOCUS_PCA, 
+    STEM
 )
 from dkmodel2vec.constants import (
     HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN,
     DATASET_NEGATIVE_COLUMN,
     DATASET_POSITIVE_COLUMN,
     DATASET_QUERY_COLUMN,
-    PREDICTION_COLUMN,
-    BM25_PREDICTION_COLUMN,
 )
 from dkmodel2vec.evaluator import evaluate_model
 from dkmodel2vec.vocab import create_vocabulary, lower_case_tokenizer
@@ -70,6 +69,7 @@ def generate_run_name(
     prenormalize_embeddings: bool = False,
     prePCAnormalize_embeddings: bool = False,
     focus_pca: bool = False, 
+    stem: bool = False,
     strip_upper_case: bool = False, 
     strip_exotic: bool = False, 
     normalize_embeddings: bool = NORMALIZE_EMBEDDINGS, 
@@ -86,7 +86,8 @@ def generate_run_name(
         'evaluate': True,
         'prenormalize_embeddings': False, 
         'prePCAnormalize_embeddings': False, 
-        'focus_pca': FOCUS_PCA, 
+        'focus_pca': FOCUS_PCA,
+        'stem' : STEM, 
         'strip_upper_case' : False, 
         'strip_exotic': False, 
         'normalize_embeddings' : NORMALIZE_EMBEDDINGS, 
@@ -119,6 +120,8 @@ def generate_run_name(
         params.append("prePCAnormalize_embeds")
     if focus_pca != defaults['focus_pca']:
         params.append("focus_pca")
+    if stem != defaults['stem']:
+        params.append("stem")
     if normalize_embeddings!= defaults['normalize_embeddings']:
         params.append("normalize_embeddings")
     if ignore_external_tokens!= defaults['ignore_external_tokens']:
@@ -145,6 +148,7 @@ def train_model(
     prenormalize_embeddings: bool = False,
     prePCAnormalize_embeddings: bool = False, 
     focus_pca: bool = FOCUS_PCA,
+    stem: bool = STEM,
     normalize_embeddings: bool = NORMALIZE_EMBEDDINGS, 
     ignore_external_tokens: bool = False
 ):
@@ -170,6 +174,7 @@ def train_model(
         prenormalize_embeddings: Whether to normalize embeddings of tokens before weighting them
         prePCAnormalize_embeddings: Whether to normalize embeddings of tokens before PCA
         focus_pca: Whether to focus the pca on the token embeddings that are represented in the corpus. 
+        stem: Whether to use a Danish stemmer on vocabulary.
         normalize_embeddings: Whether the aggregated embeddings should be normalized. 
         ignore_external_tokens: Whether to ignore all external tokens from vocabulary and ignore their weighting
     """
@@ -198,6 +203,7 @@ def train_model(
             prenormalize_embeddings=prenormalize_embeddings,
             prePCAnormalize_embeddings=prePCAnormalize_embeddings, 
             focus_pca=focus_pca,
+            stem = stem,
             normalize_embeddings=normalize_embeddings, 
             ignore_external_tokens=ignore_external_tokens
         )
@@ -220,6 +226,7 @@ def train_model(
         mlflow.log_param("normalize_embeddings", normalize_embeddings)
         mlflow.log_param("ignore_external_tokens", ignore_external_tokens)
         mlflow.log_param("focus_pca", focus_pca)
+        mlflow.log_param("stem", stem)
         if full_dataset_training:
             # Use full dataset for training
             logger.info("Training on full dataset...")
@@ -265,7 +272,11 @@ def train_model(
         # Create vocabulary
         if not ignore_external_tokens:
             logger.info(f"Creating vocabulary with size {vocab_size}...")
-            vocabulary = create_vocabulary(texts, vocab_size=vocab_size)
+            vocabulary = create_vocabulary(
+                texts, 
+                vocab_size=vocab_size,
+                stem=stem
+                )
         else: 
             vocabulary = None       
         # Train model
@@ -443,6 +454,11 @@ def main():
         action="store_true",
         help="Focus the dimension reduction (PCA) to the embeddings represented by tokens in the corpus. (default: False)"
     )
+    parser.add_argument(
+        "--stem",
+        action="store_true",
+        help="Use Danish stemmer. (default: False)"
+    )
 
     parser.add_argument(
         "--pre-pca-normalize-embeddings",  # This becomes args.pre_pca_normalize_embeddings
@@ -470,6 +486,7 @@ def main():
         prenormalize_embeddings=args.prenormalize_embeddings,
         prePCAnormalize_embeddings=args.pre_pca_normalize_embeddings,
         focus_pca=args.focus_pca,
+        stem=args.stem,
         normalize_embeddings=args.normalize_embeddings,  
         ignore_external_tokens=args.ignore_external_tokens
         )
