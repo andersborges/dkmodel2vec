@@ -49,6 +49,6 @@ uv run python scripts/train.py
 You can modify the training script to work for your own data and LLM2Vec model. Look in the the ```dkmodel2vec.load_data.py``` and ```dkmodel2vec.data_loader.py``` files. 
 
 ## Requirements
-- Python >3.12 (UV will install a suitable version)
+- Python 3.10 (UV will install a suitable version)
 - You might also need a huggingface token to download the datasets. 
 

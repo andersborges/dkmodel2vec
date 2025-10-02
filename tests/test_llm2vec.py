@@ -747,7 +747,7 @@ def test_reduce_dimensions():
 def test_create_corpus():
     from dkmodel2vec.retrieval import create_corpus
     raw = {
-        "idx": [0, 1,2,2], 
+        "idx": [0, 1,2], 
         "positive": ["hallo", None, "hej"], 
         "negative" : [None, "no", "nix"]}
     corpus = create_corpus(raw, columns = ["positive", "negative"])
@@ -755,3 +755,60 @@ def test_create_corpus():
                   "document" : ["hallo", "no", "hej", "nix"], 
                   "column" : ["positive", "negative", "positive", "negative"]}
     assert corpus == long_form
+
+def test_get_mapping_from_query_to_corpus():
+    from dkmodel2vec.retrieval import get_mapping_from_query_to_corpus
+
+
+def test_get_mapping_from_query_to_corpus():
+    from dkmodel2vec.retrieval import get_mapping_from_query_to_corpus
+    """Test mapping between query and corpus for positive examples."""   
+    flat_corpus = Dataset.from_dict({
+        'query_idx': [1, 2, 3],
+        'document': ['doc1', 'doc2', 'doc3'],
+        'column': ['positive', 'negative', 'positive']
+    })
+    result = get_mapping_from_query_to_corpus(flat_corpus)
+    assert result == {1: 0, 3: 2}
+
+
+def test_add_recall():
+    from dkmodel2vec.retrieval import add_recall
+    """Test recall calculation at different thresholds."""
+    
+    # Test: correct document at position 0 (found at all thresholds)
+    example = {
+        'corpus_idx': 42,
+        'retrieved_document_idx': [42, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+    }
+    result = add_recall(example, thresholds=[5, 10])
+    assert result['recall@5'] == 1
+    assert result['recall@10'] == 1
+    
+    # Test: correct document at position 7 (only found at threshold 10+)
+    example = {
+        'corpus_idx': 99,
+        'retrieved_document_idx': [1, 2, 3, 4, 5, 6, 7, 99, 9, 10]
+    }
+    result = add_recall(example, thresholds=[5, 10])
+    assert result['recall@5'] == 0
+    assert result['recall@10'] == 1
+    
+    # Test: correct document not in retrieved list (miss at all thresholds)
+    example = {
+        'corpus_idx': 999,
+        'retrieved_document_idx': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    }
+    result = add_recall(example, thresholds=[5, 10])
+    assert result['recall@5'] == 0
+    assert result['recall@10'] == 0
+    
+    # Test: custom thresholds
+    example = {
+        'corpus_idx': 50,
+        'retrieved_document_idx': [1, 10, 50]
+    }
+    result = add_recall(example, thresholds=[1, 2, 3])
+    assert result['recall@1'] == 0
+    assert result['recall@2'] == 0
+    assert result['recall@3'] == 1
