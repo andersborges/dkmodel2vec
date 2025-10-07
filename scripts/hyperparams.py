@@ -231,9 +231,9 @@ def train_model(
             # Use full dataset for training
             logger.info("Training on full dataset...")
             texts = (
-                dsdk[DATASET_QUERY_COLUMN]
-                + dsdk[DATASET_POSITIVE_COLUMN]
-                + dsdk[DATASET_NEGATIVE_COLUMN]
+                list(dsdk[DATASET_QUERY_COLUMN])
+                + list(dsdk[DATASET_POSITIVE_COLUMN])
+                + list(dsdk[DATASET_NEGATIVE_COLUMN])
             )
             ds_test_for_eval = dsdk.filter(
                 lambda example: example[HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN]
@@ -252,9 +252,9 @@ def train_model(
             
             # Get training texts
             texts = (
-                ds_train[DATASET_QUERY_COLUMN]
-                + ds_train[DATASET_POSITIVE_COLUMN]
-                + ds_train[DATASET_NEGATIVE_COLUMN]
+                list(ds_train[DATASET_QUERY_COLUMN])
+                + list(ds_train[DATASET_POSITIVE_COLUMN])
+                + list(ds_train[DATASET_NEGATIVE_COLUMN])
             )
             
             # Prepare test set for evaluation
