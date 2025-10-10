@@ -26,10 +26,12 @@ from dkmodel2vec.config import (
     FOCUS_PCA, 
     E5_EMBED_INSTRUCTION
 )
+from dkmodel2vec.retrieval import create_fresh_corpus_and_queries
 
 from dkmodel2vec.constants import (
     DATASET_NEGATIVE_COLUMN,
     DATASET_POSITIVE_COLUMN,
+    DATASET_CORPUS_COLUMNS
 )
 
 from dkmodel2vec.logging import setup_logging
@@ -43,7 +45,6 @@ logger = logging.getLogger(__name__)
 TEST_SIZE = 0.1
 MLFLOW_TRACKING_URI = "http://localhost:8000"
 MLFLOW_EXPERIMENT = "retrieval"
-CORPUS_COLUMNS = [DATASET_POSITIVE_COLUMN, DATASET_NEGATIVE_COLUMN]
 MAX_EXAMPLES = None
 
 def setup_mlflow():
@@ -66,34 +67,6 @@ def prepare_test_data(dsdk):
         test_idx = test_idx[:MAX_EXAMPLES]
     
     return dsdk.select(test_idx)
-
-
-def create_fresh_corpus_and_queries(ds_test:Dataset):
-    """Create fresh corpus and queries datasets without caching."""
-    flat_corpus = ds_test.map(
-        lambda examples: create_corpus(examples, columns=CORPUS_COLUMNS), 
-        remove_columns=ds_test.column_names,
-        batched=True,
-        batch_size=500,
-        load_from_cache_file=False
-    )
-    
-    # Add corpus index to flat_corpus
-    flat_corpus = flat_corpus.add_column("idx", range(flat_corpus.num_rows))
-    
-    queries = ds_test.map(
-        lambda example: {"query": example['query'], 'idx': example['idx'], "query_instruct" : example['query_instruct']}, 
-        remove_columns=ds_test.column_names,
-        load_from_cache_file=False
-    )
-    
-    query2corpus = get_mapping_from_query_to_corpus(flat_corpus)
-    queries = queries.map(
-        lambda example: add_corpus_idx(example, query2corpus), 
-        load_from_cache_file=False
-    )
-    
-    return flat_corpus, queries, query2corpus
 
 def encode_corpus_and_index(flat_corpus:Dataset, model: SentenceTransformer, index_name:str, batch_size:int=500, keep_embeddings=False):
     """Encode corpus, create FAISS index, and optionally remove embeddings."""
@@ -168,7 +141,15 @@ def run_embedding_model(ds_test, model, model_name, index_name="m2v"):
     
     # Encode queries
     mlflow.log_param("query_size", queries.num_rows)
-    queries, query_encoding_time = encode_queries(queries, model)
+    t0 = time()
+    queries = add_embeddings_wrapped(
+        ds = queries, 
+        model = model, 
+        in_column="query", 
+        out_column="embeddings", 
+        batch_size=1000)
+    query_encoding_time = t0-time()
+
     mlflow.log_metric("query_encoding_seconds", query_encoding_time)
     
     # Retrieve and calculate recall
@@ -318,7 +299,13 @@ def run_hybrid_model(ds_test, embedding_model, model_name, rrf_k=60):
                      corpus_encoding_time + bm25_encoding_time)
     
     # Encode queries for embeddings
-    queries, query_encoding_time = encode_queries(queries, embedding_model)
+    t0 = time()
+    queries = add_embeddings_wrapped(
+        ds = queries, 
+        model = embedding_model,
+        in_column = "query", 
+        out_column = "embeddings" )
+    query_encoding_time = t0 - time()
     
     # Tokenize queries for BM25
     queries = queries.map(

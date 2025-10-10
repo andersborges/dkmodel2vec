@@ -69,12 +69,17 @@ echo ""
 # python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000
 
 # Effect of stemming before creating vocabulary
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --stem --vocab-size 150000 
+#python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --stem --vocab-size 150000 
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --stem --vocab-size 150000 
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.001 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --stem --vocab-size 150000 
+# python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --stem --vocab-size 150000 
 
 
 # # train on full dataset
 # python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset
 
+# # train on full dataset with stem
+python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset --stem
 
 
 echo ""
