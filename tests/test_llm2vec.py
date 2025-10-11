@@ -721,6 +721,61 @@ def test_strip_exotic():
     assert len([t for t in positives if token_remove_regex.match(t) ]) == len(positives) 
     assert len([t for t in negatives if token_remove_regex.match(t) ]) ==0
 
+def test_strip_uncommon():
+    from dkmodel2vec.distillation import _validate_parameters
+    from model2vec.tokenizer import clean_and_create_vocabulary
+
+    token_remove_pattern = r"\[unused\d+\]"
+    word_contains_upper_case_pattern = r"\b\w*[A-Z]\w*\b"
+    contains_exotic_token_pattern = r'^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]'
+    contains_uncommon_pattern = r'^\d{2,}$|^Ġ{2,}.*|^\.|^Ġ.*\d.*\d|(?=.*[a-zA-Z])(?=.*\d)'
+    token_remove_pattern = r"|".join([token_remove_pattern, word_contains_upper_case_pattern, contains_exotic_token_pattern, contains_uncommon_pattern])
+
+    sif_coefficient, token_remove_regex = _validate_parameters(
+        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+    )
+    tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
+    vocabulary = ["kongen", "konger"]
+    
+    all_tokens, backend_tokenizer = clean_and_create_vocabulary(
+        tokenizer, vocabulary, token_remove_regex=token_remove_regex
+    )
+    
+    matches = [t for t in all_tokens if token_remove_regex.match(t.form)]
+    assert len(matches) == 0
+    
+    positives = [
+        "11",           # Two digits - MATCH
+        "090",          # Multiple digits - MATCH
+        "4200",         # Multiple digits - MATCH
+        "999999",       # Multiple digits - MATCH
+        "ĠĠ4200",       # Starts with two Ġ - MATCH
+        "ĠĠhello",      # Starts with two Ġ - MATCH
+        "ĠĠĠtest",      # Starts with three Ġ - MATCH
+        ".pdf",         # Starts with period - MATCH
+        ".txt",         # Starts with period - MATCH
+        ".config",      # Starts with period - MATCH
+        "test123",      # Mixed letters and digits - MATCH
+        "a11",          # Mixed letters and digits - MATCH
+        "hello123world", # Mixed letters and digits - MATCH
+        "Ġ4200",        # Starts with Ġ and contains 2+ digits - MATCH
+        "Ġ1test2",      # Starts with Ġ and contains 2+ digits - MATCH
+        "Ġ123",         # Starts with Ġ and contains 2+ digits - MATCH
+    ]
+    
+    negatives = [
+        "1",            # Single digit - no match
+        "9",            # Single digit - no match
+        "Ġ4",           # Starts with Ġ but only one digit - no match
+        "Ġhello",       # Only one Ġ, no digits - no match
+        "hello",        # Normal word - no match
+        "pdf",          # Doesn't start with period - no match
+        "test",         # Letters only - no match
+    ]
+
+    assert len([t for t in positives if token_remove_regex.match(t)]) == len(positives)
+    assert len([t for t in negatives if token_remove_regex.match(t)]) == 0
+    
 def test_reduce_dimensions():
     from dkmodel2vec.distillation import reduce_dimensions
     from collections import Counter
@@ -749,11 +804,13 @@ def test_create_corpus():
     raw = {
         "idx": [0, 1,2], 
         "positive": ["hallo", None, "hej"], 
-        "negative" : [None, "no", "nix"]}
-    corpus = create_corpus(raw, columns = ["positive", "negative"])
+        "negative" : [None, "no", "nix"], 
+        "split" : ["train", "val", "test"]}
+    corpus = create_corpus(raw, columns = ["positive", "negative"], add_columns=["split"])
     long_form = {"query_idx" : [0,1, 2,2 ],
                   "document" : ["hallo", "no", "hej", "nix"], 
-                  "column" : ["positive", "negative", "positive", "negative"]}
+                  "column" : ["positive", "negative", "positive", "negative"], 
+                  "split" : ["train", "val", "test", "test"]}
     assert corpus == long_form
 
 def test_get_mapping_from_query_to_corpus():

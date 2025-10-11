@@ -1,11 +1,15 @@
 from datasets import load_dataset, DatasetDict, Dataset
 
-from dkmodel2vec.config import E5_EMBED_INSTRUCTION, DANISH_INSTRUCTION
+import numpy as np
+from sklearn.model_selection import train_test_split
+
+from dkmodel2vec.config import E5_EMBED_INSTRUCTION, DANISH_INSTRUCTION, TEST_SIZE, VAL_SIZE, RANDOM_STATE
 from dkmodel2vec.constants import (
     HAS_POSITIVE_AND_NEGATIVE_EXAMPLE_COLUMN,
     DATASET_QUERY_COLUMN,
     DATASET_NEGATIVE_COLUMN,
     DATASET_POSITIVE_COLUMN,
+
 )
 
 
@@ -44,3 +48,28 @@ def load_data() -> Dataset:
     dsdk = dsdk.map(has_positive_and_negative, num_proc=4)
     dsdk = dsdk.map(get_detailed_instruct, num_proc=4)
     return dsdk
+
+
+def add_splits(ds: Dataset)->Dataset:
+    """Add train, val and test set split as a seperate column in dataset.
+    Ensure even distribution 'positive/negative' columns by stratifying on 'has_positive_negative' column. """
+    train_idx, test_idx = train_test_split(
+        np.arange(ds.num_rows),
+        test_size=TEST_SIZE,
+        stratify=ds["has_positive_and_negative"],
+        random_state=RANDOM_STATE,
+        shuffle=True
+    )
+    train_idx, val_idx = train_test_split(
+        train_idx, 
+        test_size=VAL_SIZE, 
+        stratify=ds['has_positive_and_negative'][train_idx], 
+        random_state=RANDOM_STATE, 
+        shuffle = True
+    )
+    mapper = {idx : "train" for idx in train_idx}
+    mapper.update({idx: "val" for idx in val_idx})
+    mapper.update({idx: "test" for idx in test_idx})
+    ds = ds.map(lambda example: {"split": mapper[example['idx']]})
+    return ds
+ 

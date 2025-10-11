@@ -22,6 +22,7 @@ from dkmodel2vec.config import (
     DEFAULT_PATTERN, 
     WORD_CONTAINS_UPPER_CASE_PATTERN, 
     CONTAINS_EXOTIC_PATTERN, 
+    CONTAINS_UNCOMMON_PATTERN,
     SIF_COEFFICIENT,
     RANDOM_STATE, 
     NORMALIZE_EMBEDDINGS, 
@@ -72,6 +73,7 @@ def generate_run_name(
     stem: bool = False,
     strip_upper_case: bool = False, 
     strip_exotic: bool = False, 
+    strip_uncommon: bool = False,
     normalize_embeddings: bool = NORMALIZE_EMBEDDINGS, 
     ignore_external_tokens: bool = False, 
 ):
@@ -90,6 +92,7 @@ def generate_run_name(
         'stem' : STEM, 
         'strip_upper_case' : False, 
         'strip_exotic': False, 
+        'strip_uncommon': False,
         'normalize_embeddings' : NORMALIZE_EMBEDDINGS, 
         'ignore_external_tokens' : False
     }
@@ -114,6 +117,8 @@ def generate_run_name(
         params.append("strip_upper_case")
     if strip_exotic != defaults['strip_exotic']:
         params.append("strip_exotic")
+    if strip_uncommon != defaults['strip_uncommon']:
+        params.append("strip_uncommon")
     if prenormalize_embeddings != defaults['prenormalize_embeddings']:
         params.append("prenormalize_embeds")
     if prePCAnormalize_embeddings != defaults['prePCAnormalize_embeddings']:
@@ -141,7 +146,8 @@ def train_model(
     run_name: str = None,
     save_model: bool = True,
     strip_upper_case: bool = False, 
-    strip_exotic: bool = False, 
+    strip_exotic: bool = False,
+    strip_uncommon: bool = False,  
     models_dir: str = None,
     full_dataset_training: bool = False,
     evaluate: bool = True,
@@ -167,6 +173,7 @@ def train_model(
         save_model: Whether to save the trained model
         strip_upper_case: Whether to strip tokens containing upper case 
         strip_exotic: Whether to strip tokens that contain exotic characters. 
+        strip_uncommon: Whether to strip uncommon tokens including ".pdf" and "ĠĠ1889" and numbers with more than one digit. 
         models_dir: Directory to save models
         full_dataset_training: Whether to train on full dataset (no train/test split)
         evaluate: Whether to evaluate the model
@@ -200,6 +207,7 @@ def train_model(
             evaluate=evaluate,
             strip_upper_case=strip_upper_case,
             strip_exotic=strip_exotic,
+            strip_uncommon=strip_uncommon,
             prenormalize_embeddings=prenormalize_embeddings,
             prePCAnormalize_embeddings=prePCAnormalize_embeddings, 
             focus_pca=focus_pca,
@@ -223,6 +231,7 @@ def train_model(
         mlflow.log_param("prePCAnormalize_embeddings", prePCAnormalize_embeddings)
         mlflow.log_param("strip_upper_case", strip_upper_case)
         mlflow.log_param("strip_exotic", strip_exotic)
+        mlflow.log_param("strip_uncommon", strip_uncommon)
         mlflow.log_param("normalize_embeddings", normalize_embeddings)
         mlflow.log_param("ignore_external_tokens", ignore_external_tokens)
         mlflow.log_param("focus_pca", focus_pca)
@@ -268,6 +277,9 @@ def train_model(
         if strip_exotic: 
             contains_exotic_pattern = CONTAINS_EXOTIC_PATTERN
             token_remove_pattern = r"|".join([token_remove_pattern, contains_exotic_pattern])
+        if strip_uncommon: 
+            contains_uncommon_pattern = CONTAINS_UNCOMMON_PATTERN
+            token_remove_pattern = r"|".join([token_remove_pattern, contains_uncommon_pattern])
 
         # Create vocabulary
         if not ignore_external_tokens:
@@ -370,6 +382,12 @@ def main():
         action="store_true",
         help="Strip tokens containing exotic characters (default: False)"
     )
+    parser.add_argument(
+        "--strip-uncommon",
+        action="store_true",
+        help="Strip tokens containing uncommon tokens such as long digits and words starting with '.' (default: False)"
+    )
+
     parser.add_argument(
         "--vocab-size",
         type=int,
@@ -480,6 +498,7 @@ def main():
         save_model=not args.no_save,
         strip_upper_case=args.strip_upper_case,
         strip_exotic=args.strip_exotic,
+        strip_uncommon=args.strip_uncommon,
         models_dir=args.models_dir,
         full_dataset_training=args.full_dataset,
         evaluate=not args.no_eval,

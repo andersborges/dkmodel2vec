@@ -1,13 +1,16 @@
 from collections import defaultdict
+from typing import Union
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from datasets import Dataset
 from typing import Any 
 from bm25s import BM25
-import mlflow 
+from llm2vec import LLM2Vec
+
 import dkmodel2vec.constants as constants
 from dkmodel2vec.constants import DATASET_CORPUS_COLUMNS
-def create_corpus(examples: dict, columns:list[str] = [constants.DATASET_POSITIVE_COLUMN, constants.DATASET_NEGATIVE_COLUMN]): 
+
+def create_corpus(examples: dict, columns:list[str] = [constants.DATASET_POSITIVE_COLUMN, constants.DATASET_NEGATIVE_COLUMN], add_columns:list[str] = []): 
     """Create corpus in long form where every document has its own row. """
     documents = []
     
@@ -22,6 +25,7 @@ def create_corpus(examples: dict, columns:list[str] = [constants.DATASET_POSITIV
         key: [doc[key] for doc in documents] 
         for key in ["query_idx", "document", "column"]
                 }
+
     return long_form
 
 def get_mapping_from_query_to_corpus(flat_corpus:Dataset):
@@ -38,8 +42,9 @@ def add_corpus_idx(example: dict, query_idx_to_corpus_idx: dict[int, int]):
     example['corpus_idx'] = query_idx_to_corpus_idx.get(example['idx'], None)
     return example
 
-def add_embeddings_wrapped(ds: Dataset, model: SentenceTransformer, in_column:str, out_column:str, batch_size:int, device:str = "cuda:0"):
+def add_embeddings_wrapped(ds: Dataset, model: SentenceTransformer | LLM2Vec, in_column:str, out_column:str, batch_size:int, device:str = "cuda:0"):
     """Wrapper function to increase readability. Model must have .encode method. """
+
     ds = ds.map(
         lambda examples: {
             out_column: model.encode(
