@@ -12,7 +12,7 @@ from typing import cast
 
 from tokenizers import Tokenizer
 
-from transformers import PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast,AutoTokenizer
 
 from model2vec.tokenizer.datamodels import Token
 from dkmodel2vec.constants import STEMMER_LANGUAGE

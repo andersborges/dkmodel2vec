@@ -10,7 +10,7 @@ from llm2vec import LLM2Vec
 import dkmodel2vec.constants as constants
 from dkmodel2vec.constants import DATASET_CORPUS_COLUMNS
 
-def create_corpus(examples: dict, columns:list[str] = [constants.DATASET_POSITIVE_COLUMN, constants.DATASET_NEGATIVE_COLUMN], add_columns:list[str] = []): 
+def create_corpus(examples: dict, columns:list[str] = [constants.DATASET_POSITIVE_COLUMN, constants.DATASET_NEGATIVE_COLUMN]): 
     """Create corpus in long form where every document has its own row. """
     documents = []
     

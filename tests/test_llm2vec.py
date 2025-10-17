@@ -14,6 +14,17 @@ from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
 from model2vec import StaticModel
 
+import pytest
+import numpy as np
+from datasets import Dataset
+from model2vec import StaticModel
+from dkmodel2vec.evaluator import (
+    evaluate_classification,
+    evaluate_model,
+)
+from dkmodel2vec.models import LlamaModelWrapper
+from dkmodel2vec.distillation import distill_from_model_and_corpus
+from dkmodel2vec.constants import PREDICTION_COLUMN
 
 def test_llm2vec_import():
     """Test that LLM2Vec class can be imported successfully."""
@@ -465,18 +476,6 @@ def test_weight_embeddings():
     # test_debug_accuracy.py
 
 
-import pytest
-import numpy as np
-from datasets import Dataset
-from model2vec import StaticModel
-from dkmodel2vec.evaluator import (
-    compute_distances,
-    evaluate_classification,
-    evaluate_model,
-)
-from dkmodel2vec.models import LlamaModelWrapper
-from dkmodel2vec.distillation import distill_from_model_and_corpus
-from dkmodel2vec.constants import PREDICTION_COLUMN
 
 
 @pytest.fixture
@@ -869,3 +868,59 @@ def test_add_recall():
     assert result['recall@1'] == 0
     assert result['recall@2'] == 0
     assert result['recall@3'] == 1
+
+def test_text_length_filtering():
+    from dkmodel2vec.config import DANISH_INSTRUCTION
+    from dkmodel2vec.utils import check_fits_length, add_instruction_to_text
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
+    
+    # Test data with short and long texts
+    batch = {
+        "document": ["Denne tekst er laaaaaaang..." * 1000, "kort", "kort uden instr"], 
+        "column": ["query", "query", "positive"]
+    }
+    max_length = 800
+    doc_max_length = 400
+    
+    # Test 1: Check length filtering
+    length_check = check_fits_length(batch, tokenizer, max_length, doc_max_length)
+    
+    assert length_check['fits_length'][0] == False, "Long text should not fit"
+    assert length_check['fits_length'][1] == True, "Short text should fit"
+    assert length_check['fits_length'][2] == True, "Short text should fit"
+    
+    # Test 2: Filter to only texts that fit
+    filtered_batch = {
+        "document": [batch['document'][i] for i, fits in enumerate(length_check['fits_length']) if fits],
+        "column": [batch['column'][i] for i, fits in enumerate(length_check['fits_length']) if fits]
+    }
+    
+    assert len(filtered_batch['document']) == 2, "Should keep 2 short texts"
+    
+    # Test 3: Add instructions to filtered texts
+    output = add_instruction_to_text(filtered_batch, DANISH_INSTRUCTION)
+    
+    assert len(output['processed_text']) == 2, "Should have 2 processed texts"
+    assert DANISH_INSTRUCTION in output['processed_text'][0], "Query should have instruction"
+    assert DANISH_INSTRUCTION not in output['processed_text'][1], "Positive should not have instruction"
+    assert "!@#$%^&*()" in output['processed_text'][0], "Should have separator"
+    assert "kort" in output['processed_text'][0], "Should contain original text"
+
+
+def test_add_instruction_format():
+    """Test that instruction formatting matches LLM2Vec exactly."""
+    from dkmodel2vec.config import DANISH_INSTRUCTION
+    from dkmodel2vec.utils import add_instruction_to_text
+    
+    batch = {
+        "document": ["test text", "another text"],
+        "column": ["query", "positive"]
+    }
+    
+    output = add_instruction_to_text(batch, DANISH_INSTRUCTION)
+    
+    # Verify exact format: "instruction !@#$%^&*()text"
+    assert output['processed_text'][0] == f"{DANISH_INSTRUCTION.strip()} !@#$%^&*()test text"
+    assert output['processed_text'][1] == "!@#$%^&*()another text"

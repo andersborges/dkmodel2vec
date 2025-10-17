@@ -79,8 +79,10 @@ echo ""
 # python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset
 
 # # train on full dataset with stem
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset --stem
+#python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset --stem
 
+# train small model while stripping uncommon tokens and only 50k tokens
+python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --strip-uncommon --focus-pca --normalize-embeddings --stem --vocab-size 50000 
 
 echo ""
 echo "======================================"

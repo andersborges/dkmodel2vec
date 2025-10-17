@@ -1,4 +1,5 @@
 VOCAB_SIZE = 150_000
+MAX_TOKENS = 1000 
 DEFAULT_PATTERN = r"\[unused\d+\]"
 WORD_CONTAINS_UPPER_CASE_PATTERN = r"\b\w*[A-Z]\w*\b"
 CONTAINS_EXOTIC_PATTERN = r'^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]'
