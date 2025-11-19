@@ -10,7 +10,11 @@ def load_base_model(
     base_model_name_or_path: str | os.PathLike = "jealk/llm2vec-scandi-mntp-v2",
 ) -> AutoModel:
     # Loading base Llama model, along with custom code that enables bidirectional connections in decoder-only LLMs.
-    config = AutoConfig.from_pretrained(base_model_name_or_path, trust_remote_code=True, revision = "52213e3148b2be323186df65f3d78d9b5001fe27")
+    config = AutoConfig.from_pretrained(
+        base_model_name_or_path,
+        trust_remote_code=True,
+        revision="52213e3148b2be323186df65f3d78d9b5001fe27",
+    )
     base_model = AutoModel.from_pretrained(
         base_model_name_or_path,
         trust_remote_code=True,
@@ -35,8 +39,8 @@ def load_llm2vec_model(
     base_model_name_or_path: str | os.PathLike = "jealk/llm2vec-scandi-mntp-v2",
     supervised_model_name_or_path: str
     | os.PathLike
-    | None = "jealk/TTC-L2V-supervised-2", 
-    max_length=8124
+    | None = "jealk/TTC-L2V-supervised-2",
+    max_length=8124,
 ) -> LLM2Vec:
     """Wrapper function to load base model with LoRA weights from the same model path merged in and adding LoRA weights from other (supervised) model path."""
     tokenizer = AutoTokenizer.from_pretrained(base_model_name_or_path)

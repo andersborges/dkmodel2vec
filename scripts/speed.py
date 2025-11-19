@@ -26,7 +26,7 @@ batch_size_large = 10000
 
 def measure_sentence_transformer_speed(contiguous_corpus: Dataset, device: str):
     with mlflow.start_run(run_name="encoding"):
-        for model_path in [ CHEAP_MODEL_PATH]:#BEST_SENTENCE_TRANSFORMER,
+        for model_path in [CHEAP_MODEL_PATH]:  # BEST_SENTENCE_TRANSFORMER,
             with mlflow.start_run(run_name=model_path.split()[-1], nested=True):
                 model = SentenceTransformer(model_path)
                 for max_rows in [10_000]:
@@ -54,7 +54,7 @@ def measure_sentence_transformer_speed(contiguous_corpus: Dataset, device: str):
     return
 
 
-def measure_model2vec_speed(contiguous_corpus: Dataset, device:str, model_path:str):
+def measure_model2vec_speed(contiguous_corpus: Dataset, device: str, model_path: str):
     """Assess the speed with a larger batch size because it is sooo fast."""
     with mlflow.start_run(run_name=model_path.split()[-1], nested=True):
         model = StaticModel.from_pretrained(model_path)
@@ -93,9 +93,9 @@ def measure_encoding_speed():
     corpus, queries, query2corpus_mapping = create_fresh_corpus_and_queries(dsdk)
     shuffled_corpus = corpus.shuffle(seed=RANDOM_STATE)
     contiguous_corpus = shuffled_corpus.flatten_indices()
-#    measure_model2vec_speed(
-#        contiguous_corpus=contiguous_corpus, device=device, model_path=MODEL2VEC_PATH
-#    )
+    #    measure_model2vec_speed(
+    #        contiguous_corpus=contiguous_corpus, device=device, model_path=MODEL2VEC_PATH
+    #    )
     measure_sentence_transformer_speed(
         contiguous_corpus=contiguous_corpus, device=device
     )

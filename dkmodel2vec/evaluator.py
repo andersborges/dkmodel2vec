@@ -24,7 +24,7 @@ from dkmodel2vec.constants import (
     DATASET_NEGATIVE_COLUMN,
     DATASET_POSITIVE_COLUMN,
     DATASET_QUERY_COLUMN,
-    LLM2VEC_PREDICTION_COLUMN
+    LLM2VEC_PREDICTION_COLUMN,
 )
 from llm2vec.llm2vec import LLM2Vec
 
@@ -102,6 +102,7 @@ def predict_sentence_transformer_cos_sim(
     batch[out_column] = predictions.tolist()
     return batch
 
+
 def predict_llm2vec(
     batch: dict,
     model: LLM2Vec,
@@ -112,9 +113,11 @@ def predict_llm2vec(
     positives = batch[DATASET_POSITIVE_COLUMN]
     negatives = batch[DATASET_NEGATIVE_COLUMN]
 
-    instructions = len(queries)*[DANISH_INSTRUCTION]
+    instructions = len(queries) * [DANISH_INSTRUCTION]
 
-    query_embeds = model.encode([[inst_n, q_n] for inst_n, q_n in zip(instructions, queries)])
+    query_embeds = model.encode(
+        [[inst_n, q_n] for inst_n, q_n in zip(instructions, queries)]
+    )
     pos_embeds = model.encode(positives)
     neg_embeds = model.encode(negatives)
 
@@ -124,6 +127,7 @@ def predict_llm2vec(
 
     batch[out_column] = predictions.tolist()
     return batch
+
 
 def predict_sentence_transformer(
     batch: dict,
@@ -300,13 +304,14 @@ def evaluate_model(
 
 
 def evaluate_bm25(dataset: Dataset):
-    """BM25 performance with frequencies from positive and negative pair. """
+    """BM25 performance with frequencies from positive and negative pair."""
     predictions = np.array(dataset[BM25_PREDICTION_COLUMN])
     bm25_results = evaluate_classification(
         predictions, ground_truth=np.ones_like(predictions)
     )
     log_performance(bm25_results, log_prefix="bm25")
     return
+
 
 def evaluate_full_bm25(dataset: Dataset):
     """BM25 performance with frequencies from all positive and negative pairs."""
@@ -318,13 +323,12 @@ def evaluate_full_bm25(dataset: Dataset):
     log_performance(bm25_results, log_prefix="bm25")
     return
 
-def evaluate_llm2vec_model(dataset: Dataset, model: LLM2Vec)->Dataset:
+
+def evaluate_llm2vec_model(dataset: Dataset, model: LLM2Vec) -> Dataset:
     """Add predictions for raw llm2vec model as seperate column in dataset and log performance."""
     logger.info("Computing scores with raw llm2vec model... ")
     dataset = dataset.map(
-        lambda batch: predict_llm2vec(
-            batch, model
-        ),
+        lambda batch: predict_llm2vec(batch, model),
         batched=True,
         batch_size=100,
     )
@@ -339,6 +343,7 @@ def evaluate_llm2vec_model(dataset: Dataset, model: LLM2Vec)->Dataset:
         log_prefix="LLM2Vec",
     )
     return dataset
+
 
 def evaluate_sentence_transformer(
     dataset: Dataset, model_name: str = BEST_SENTENCE_TRANSFORMER

@@ -26,8 +26,7 @@ dependencies = [
     "pytest>=8.4.0",
     "rank-bm25",
     "ruff>=0.11.13",
-    "seb",
-    "tokenlearn>=0.2.1",
+    "tokenlearn",
     "torch>=2.7.1",
     "typing-extensions>=4.15.0",
 ]
@@ -37,6 +36,7 @@ exclude = ["notebooks*", "tests*"]
 
 [tool.uv.sources]
 llm2vec = { git = "https://github.com/andersborges/llm2vec.git" }
+tokenlearn = { git = "https://github.com/MinishLab/tokenlearn" }
 
 [dependency-groups]
 dev = [

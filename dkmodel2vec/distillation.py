@@ -379,47 +379,64 @@ def normalize_embeddings(embeddings: np.array):
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     return embeddings / (norms + 1e-12)
 
-def reduce_dimensions(embeddings: np.array, pca_dims: int | None, token_counts: Counter)->np.array:
+
+def reduce_dimensions(
+    embeddings: np.array, pca_dims: int | None, token_counts: Counter | None
+) -> np.array:
     """Reduce embeddings dimensions by keeping the principal pca_dims dimension.
-    The principal components are found from the space spanned by the embeddings with finite token_counts 
-    (embeddings vectors without a single count are ignored).  
+    The principal components are found from the space spanned by the embeddings with finite token_counts
+    (embeddings vectors without a single count are ignored).
     """
     if pca_dims is not None:
-            used_tokens = [token_id for token_id, token_count in token_counts.most_common() if token_count>=1]
-            used_subspace = embeddings.take(used_tokens, axis = 0)
-            if len(used_subspace)==0:
-                logger.warning(f"None of the tokens in the have a count higher than zero. This is likely a mistake or there is no corpus. Will fall back to using all dimensions. ")
-                used_subspace = embeddings
-                print( "fkjlaskdj")
-            if pca_dims == "auto":
-                pca_dims = used_subspace.shape[1]
-            if pca_dims > used_subspace.shape[1]:
-                logger.warning(
-                    f"PCA dimension ({pca_dims}) is larger than the number of dimensions in the used subspace ({used_subspace.shape[1]}). "
-                    "Applying PCA, but not reducing dimensionality. Is this is not desired, please set `pca_dims` to None. "
-                    "Applying PCA will probably improve performance, so consider just leaving it."
+        if token_counts is not None:
+            used_tokens = [
+                token_id
+                for token_id, token_count in token_counts.most_common()
+                if token_count >= 1
+            ]
+            used_subspace = embeddings.take(used_tokens, axis=0)
+        else:
+            used_subspace = embeddings
+        if len(used_subspace) == 0:
+            logger.warning(
+                f"None of the tokens in the have a count higher than zero. This is likely a mistake or there is no corpus. Will fall back to using all dimensions. "
+            )
+            used_subspace = embeddings
+        if pca_dims == "auto":
+            pca_dims = used_subspace.shape[1]
+        if pca_dims > used_subspace.shape[1]:
+            logger.warning(
+                f"PCA dimension ({pca_dims}) is larger than the number of dimensions in the used subspace ({used_subspace.shape[1]}). "
+                "Applying PCA, but not reducing dimensionality. Is this is not desired, please set `pca_dims` to None. "
+                "Applying PCA will probably improve performance, so consider just leaving it."
+            )
+            pca_dims = embeddings.shape[1]
+        if pca_dims >= embeddings.shape[0]:
+            logger.warning(
+                f"PCA dimension ({pca_dims}) is larger than the number of tokens in the vocabulary ({embeddings.shape[0]}). Not applying PCA."
+            )
+        elif pca_dims <= embeddings.shape[1]:
+            logger.info(f"Applying PCA with n_components {pca_dims}")
+
+            orig_dims = embeddings.shape[1]
+
+            p = PCA(n_components=pca_dims, svd_solver="full")
+            logger.info(
+                f"Fitting with subspace of shape {used_subspace.shape}. There are {embeddings.shape[0]} tokens in total. There are {used_subspace.shape[0]} tokens with finite counts. "
+            )
+            p.fit(used_subspace)
+            reduced_embeddings = p.transform(embeddings)
+
+            if embeddings.shape[1] < orig_dims:
+                explained_variance_ratio = np.sum(p.explained_variance_ratio_)
+                explained_variance = np.sum(p.explained_variance_)
+                logger.info(
+                    f"Reduced dimensionality from {orig_dims} to {embeddings.shape[1]}."
                 )
-                pca_dims = embeddings.shape[1]
-            if pca_dims >= embeddings.shape[0]:
-                logger.warning(
-                    f"PCA dimension ({pca_dims}) is larger than the number of tokens in the vocabulary ({embeddings.shape[0]}). Not applying PCA."
+                logger.info(
+                    f"Explained variance ratio: {explained_variance_ratio:.3f}."
                 )
-            elif pca_dims <= embeddings.shape[1]:
-                logger.info(f"Applying PCA with n_components {pca_dims}")
-
-                orig_dims = embeddings.shape[1]
-
-                p = PCA(n_components=pca_dims, svd_solver="full")
-                logger.info(f"Fitting with subspace of shape {used_subspace.shape}. There are {embeddings.shape[0]} tokens in total. There are {used_subspace.shape[0]} tokens with finite counts. ")
-                p.fit(used_subspace)
-                reduced_embeddings = p.transform(embeddings)
-
-                if embeddings.shape[1] < orig_dims:
-                    explained_variance_ratio = np.sum(p.explained_variance_ratio_)
-                    explained_variance = np.sum(p.explained_variance_)
-                    logger.info(f"Reduced dimensionality from {orig_dims} to {embeddings.shape[1]}.")
-                    logger.info(f"Explained variance ratio: {explained_variance_ratio:.3f}.")
-                    logger.info(f"Explained variance: {explained_variance:.3f}.")
+                logger.info(f"Explained variance: {explained_variance:.3f}.")
 
     return reduced_embeddings
 
@@ -438,8 +455,8 @@ def calculate_weights(
     sif_coefficient: float = 1e-3,
 ) -> dict[int, float]:
     """Calculate the weight of each token from token frequency using SIF weighting.
-    If there is no occurence of the token in token counts, then assume a maximum frequency corresponding 
-    to the least frequent token and the weight of all tokens will be the same. """
+    If there is no occurence of the token in token counts, then assume a maximum frequency corresponding
+    to the least frequent token and the weight of all tokens will be the same."""
     _, ids = zip(*sorted(backend_tokenizer.get_vocab().items(), key=lambda x: x[1]))
     total = token_counts.total()
     if total == 0:
@@ -620,12 +637,12 @@ def distill_from_llm2vec_and_corpus(
     :param device: The device to use.
     :param prePCAnormalize_embeddings: Normalize input to the PCA
     :param prenormalize_embeddings: Normalize input to weighting
-    :param normalize_embeddings: Whether to normalize the aggregated embeddings at inference. 
+    :param normalize_embeddings: Whether to normalize the aggregated embeddings at inference.
     :param pca_dims: The number of components to use for PCA.
         If this is None, we don't apply PCA.
         If this is 'auto', we don't reduce dimensionality, but still apply PCA.
-    :param focus_pca: 
-        If this is True, the dimension reduction will only take embedding vectors into account that have a finite count. 
+    :param focus_pca:
+        If this is True, the dimension reduction will only take embedding vectors into account that have a finite count.
         If set to false, will use all embedding vectors, also those corresponding to tokens that are not even represented in the corpus.
     :param token_remove_pattern: If this is set to a string, we compile this into a regex. Any tokens that conform to this regex pattern will be removed from the vocabulary.
         If the pattern is so general that it removes all tokens, we throw an error. If the pattern can't be compiled into a valid regex, we also throw an error.
@@ -750,8 +767,10 @@ def distill_from_llm2vec_and_corpus(
         embeddings = normalize_embeddings(embeddings)
 
     if focus_pca:
-        embeddings = reduce_dimensions(np.asarray(embeddings), pca_dims=pca_dims, token_counts=token_counts)
-    else:    
+        embeddings = reduce_dimensions(
+            np.asarray(embeddings), pca_dims=pca_dims, token_counts=token_counts
+        )
+    else:
         # Manually set sif_coefficient to None here to move weigting to seperate function
         embeddings = post_process_embeddings(
             np.asarray(embeddings), pca_dims, sif_coefficient=None

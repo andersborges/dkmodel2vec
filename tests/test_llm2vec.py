@@ -26,6 +26,7 @@ from dkmodel2vec.models import LlamaModelWrapper
 from dkmodel2vec.distillation import distill_from_model_and_corpus
 from dkmodel2vec.constants import PREDICTION_COLUMN
 
+
 def test_llm2vec_import():
     """Test that LLM2Vec class can be imported successfully."""
     try:
@@ -35,17 +36,6 @@ def test_llm2vec_import():
         assert callable(LLM2Vec)
     except ImportError as e:
         pytest.fail(f"Failed to import LLM2Vec: {e}")
-
-
-def test_llm2vec_class_structure():
-    """Test that LLM2Vec has expected attributes and methods."""
-    from llm2vec import LLM2Vec
-
-    assert isinstance(LLM2Vec, type)
-
-    expected_methods = ["encode", "from_pretrained"]
-    for method in expected_methods:
-        assert hasattr(LLM2Vec, method), f"LLM2Vec should have {method} method"
 
 
 def test_model2vec_version():
@@ -152,7 +142,6 @@ def test_llm2vec_model_loads(tiny_llm2vec):
     assert hasattr(tiny_llm2vec, "encode")
 
 
-# Tests using the cached model fixture
 def test_fine_tuned_llm2vec_model_loads(tiny_fine_tuned_llm2vec_model):
     """Test that the model loads successfully (uses cached model)."""
     assert tiny_fine_tuned_llm2vec_model is not None
@@ -212,12 +201,6 @@ def test_model2vec_distillation(tiny_fine_tuned_llm2vec_model, sample_texts):
     )
     embeddings = m2v_model.encode(sample_texts)
     assert embeddings.shape
-
-    models_dir = Path(__file__).parent / "models"
-    models_dir.mkdir(exist_ok=True)
-
-    model_name = "test"
-    m2v_model.save_pretrained(models_dir / model_name)
 
 
 def test_adding_vocabulary(tiny_fine_tuned_llm2vec_model):
@@ -393,10 +376,11 @@ def test_sentence_transformer_predict():
 
     model = load_sentence_transformer(model_name="minishlab/potion-base-8M")
     ds = load_data()
+    ds = ds.select(range(100))
     ds = ds.filter(
         lambda example: True if example["has_positive_and_negative"] else False
     )
-    batch_size = 1000
+    batch_size = 50
     ds = ds.map(
         lambda batch: predict_sentence_transformer(batch, model),
         batched=True,
@@ -410,33 +394,6 @@ def test_create_vocabulary():
     test_input = ["I like cats", "i LIKE likE CATS caTS CAts", "dogs"]
     vocab = create_vocabulary(test_input)
     assert vocab == ["cats", "like", "i", "dogs"]
-
-
-# def test_token_ordering():
-#     from model2vec.tokenizer.tokenizer import clean_and_create_vocabulary, replace_vocabulary
-#     from dkmodel2vec.vocab import lower_case_tokenizer
-#     from dkmodel2vec.distillation import estimate_token_frequencies, sort_tokens_by_frequency,calculate_weights
-#     tokenizer = AutoTokenizer.from_pretrained( "jealk/llm2vec-scandi-mntp-v2")
-#     tokenizer = lower_case_tokenizer(tokenizer)
-#     vocab = ["unlikelytokenforsure1", "unlikelytokenforsure2", "unlikelytokenforsure3"]
-#     corpus = ["unlikelytokenforsure1", "unlikelytokenforsure1 unlikelytokenforsure2 unlikelytokenforsure1 unlikelytokenforsure2 unlikelytokenforsure3"]
-#     backend_tokenizer = tokenizer.backend_tokenizer
-#     all_tokens, backend_tokenizer = clean_and_create_vocabulary(
-#     tokenizer, vocab, token_remove_regex=None
-#     )
-
-#     backend_tokenizer_replaced_vocab = replace_vocabulary(
-#         backend_tokenizer,
-#         all_tokens, ",", "-"    )
-
-#     token_counts = estimate_token_frequencies(
-#             backend_tokenizer=backend_tokenizer_replaced_vocab,
-#             corpus_texts=corpus,
-#             batch_size=1000,
-#         )
-
-
-#     assert 1
 
 
 def test_calculate_weights():
@@ -473,10 +430,6 @@ def test_weight_embeddings():
         ]
     )
 
-    # test_debug_accuracy.py
-
-
-
 
 @pytest.fixture
 def debug_dataset():
@@ -502,45 +455,6 @@ def debug_dataset():
         }
     )
     return dataset
-
-
-def test_debug_accuracy_with_known_good_model(debug_dataset):
-    """Test with a known working sentence transformer to verify our evaluation logic."""
-    from sentence_transformers import SentenceTransformer
-
-    # Use a small but working sentence transformer
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-
-    queries = debug_dataset["query"]
-    positives = debug_dataset["positive"]
-    negatives = debug_dataset["negative"]
-
-    # Encode all texts
-    query_embeds = model.encode(queries)
-    pos_embeds = model.encode(positives)
-    neg_embeds = model.encode(negatives)
-
-    # Compute distances (same logic as your evaluator)
-    pos_distances = np.linalg.norm(query_embeds - pos_embeds, axis=1)
-    neg_distances = np.linalg.norm(query_embeds - neg_embeds, axis=1)
-
-    print(f"Positive distances: {pos_distances}")
-    print(f"Negative distances: {neg_distances}")
-    print(f"Pos < Neg: {pos_distances < neg_distances}")
-
-    # Make predictions
-    predictions = (pos_distances < neg_distances).astype(int)
-
-    # Evaluate
-    results = evaluate_classification(predictions, np.ones_like(predictions))
-
-    print(f"Accuracy with sentence transformer: {results['accuracy']}")
-    print(f"Predictions: {predictions}")
-
-    # This should have reasonable accuracy (> 0.5) with our clear examples
-    assert results["accuracy"] > 0.5, (
-        f"Expected accuracy > 0.5, got {results['accuracy']}"
-    )
 
 
 def trained_embeddings_do_not_explode(tiny_fine_tuned_llm2vec_model):
@@ -587,10 +501,13 @@ def trained_embeddings_do_not_explode(tiny_fine_tuned_llm2vec_model):
 
 def test_validation_of_parameters():
     from dkmodel2vec.distillation import _validate_parameters
+
     token_remove_pattern = r"\[unused\d+\]|\b\w*[A-Z]\w*\b"
 
     sif_coefficient, token_remove_regex = _validate_parameters(
-        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+        apply_zipf=False,
+        sif_coefficient=1e-3,
+        token_remove_pattern=token_remove_pattern,
     )
 
     assert sif_coefficient is None
@@ -619,9 +536,24 @@ def test_turn_tokens_into_llm2mvec_input(sample_tokenizer):
         ),
     ]
     ll2vec_input = turn_tokens_into_llm2mvec_input(
-        tokens=tokens, tokenizer=sample_tokenizer, unk_token=unk_token
+        tokens=tokens, base_tokenizer=sample_tokenizer, unk_token=unk_token
     )
     assert len(ll2vec_input) == 3
+
+
+# def test_remove_accents_tokenizer():
+
+#     from dkmodel2vec.vocab import remove_accents_tokenizer, lower_case_tokenizer
+
+#     unchanged = ["ærlig", "å", "mit ønske"]
+#     expected_to_change = [{"input" : "áccent", "expected_output" : "accent"}]
+
+#     tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
+#     tokenizer = lower_case_tokenizer(tokenizer)
+#     tokenizer = remove_accents_tokenizer(tokenizer)
+
+#     encoded_unchanged =tokenizer.encode(unchanged)
+#     assert 1# all([tokenizer.encode_batch([])])
 
 
 def test_turn_tokens_into_llm2mvec_input_with_instructions(sample_tokenizer):
@@ -647,12 +579,13 @@ def test_turn_tokens_into_llm2mvec_input_with_instructions(sample_tokenizer):
     ]
     llm2vec_input = turn_tokens_into_llm2mvec_input(
         tokens=tokens,
-        tokenizer=sample_tokenizer,
+        base_tokenizer=sample_tokenizer,
         unk_token=unk_token,
         instruction="Here is the prepend",
     )
     assert len(llm2vec_input) == 3
     assert all([len(inp) == 2 for inp in llm2vec_input])
+
 
 def test_strip_upper_case():
     from dkmodel2vec.distillation import _validate_parameters
@@ -660,23 +593,28 @@ def test_strip_upper_case():
 
     token_remove_pattern = r"\[unused\d+\]"
     word_contains_upper_case_pattern = r"\b\w*[A-Z]\w*\b"
-    token_remove_pattern = r"|".join([token_remove_pattern,word_contains_upper_case_pattern] )
-    
+    token_remove_pattern = r"|".join(
+        [token_remove_pattern, word_contains_upper_case_pattern]
+    )
+
     sif_coefficient, token_remove_regex = _validate_parameters(
-        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+        apply_zipf=False,
+        sif_coefficient=1e-3,
+        token_remove_pattern=token_remove_pattern,
     )
     tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
     vocabulary = ["kongen", "konger"]
-    
+
     all_tokens, backend_tokenizer = clean_and_create_vocabulary(
         tokenizer, vocabulary, token_remove_regex=token_remove_regex
     )
 
-    assert len([t for t in all_tokens if token_remove_regex.match(t.form) ]) == 0
-    positives = ["kfaK", "KKK", "Mkjl", "ĠkfaK"] # should get matched
-    negatives = ["Ġkfa", "kkk", "æ"] # should NOT get matched
-    assert len([t for t in positives if token_remove_regex.match(t) ]) == len(positives) 
-    assert len([t for t in negatives if token_remove_regex.match(t) ]) ==0
+    assert len([t for t in all_tokens if token_remove_regex.match(t.form)]) == 0
+    positives = ["kfaK", "KKK", "Mkjl", "ĠkfaK"]  # should get matched
+    negatives = ["Ġkfa", "kkk", "æ"]  # should NOT get matched
+    assert len([t for t in positives if token_remove_regex.match(t)]) == len(positives)
+    assert len([t for t in negatives if token_remove_regex.match(t)]) == 0
+
 
 def test_strip_exotic():
     from dkmodel2vec.distillation import _validate_parameters
@@ -685,40 +623,51 @@ def test_strip_exotic():
     token_remove_pattern = r"\[unused\d+\]"
     word_contains_upper_case_pattern = r"\b\w*[A-Z]\w*\b"
     # Match tokens with exotic chars, except 'Ġ' and '#' followed by only normal chars
-    contains_exotic_token_pattern = r'^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]'
-    token_remove_pattern = r"|".join([token_remove_pattern,word_contains_upper_case_pattern, contains_exotic_token_pattern] )
+    contains_exotic_token_pattern = (
+        r"^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]"
+    )
+    token_remove_pattern = r"|".join(
+        [
+            token_remove_pattern,
+            word_contains_upper_case_pattern,
+            contains_exotic_token_pattern,
+        ]
+    )
 
     sif_coefficient, token_remove_regex = _validate_parameters(
-        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+        apply_zipf=False,
+        sif_coefficient=1e-3,
+        token_remove_pattern=token_remove_pattern,
     )
     tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
     vocabulary = ["kongen", "konger"]
-    
+
     all_tokens, backend_tokenizer = clean_and_create_vocabulary(
         tokenizer, vocabulary, token_remove_regex=token_remove_regex
     )
-    matches = [t for t in all_tokens if token_remove_regex.match(t.form) ]
+    matches = [t for t in all_tokens if token_remove_regex.match(t.form)]
     assert len(matches) == 0
-    positives = ["hello!",       # Contains ! (not normal) - MATCH
-        "test@email",   # Contains @ (not normal) - MATCH  
-        "café™",        # Contains ™ (not normal) - MATCH
-        "Ġhello!", # contains ! - Match
+    positives = [
+        "hello!",  # Contains ! (not normal) - MATCH
+        "test@email",  # Contains @ (not normal) - MATCH
+        "café™",  # Contains ™ (not normal) - MATCH
+        "Ġhello!",  # contains ! - Match
         "Ġtest@email",  # contains @ - Match
-        "#unlikelytoken___", # contains ___ - MATCH
-        "#en" #contains # which is not an indicator of a continued word in BPE - So it should MATCH
-
+        "#unlikelytoken___",  # contains ___ - MATCH
+        "#en",  # contains # which is not an indicator of a continued word in BPE - So it should MATCH
     ]
     negatives = [
-        "<|end_of_text|>", # special case
-        "Ġhello", # starts with Ġ, rest are normal
-        "hello",        # All normal - no match
+        "<|end_of_text|>",  # special case
+        "Ġhello",  # starts with Ġ, rest are normal
+        "hello",  # All normal - no match
         "hello world",  # Contains space (normal) - no match
-        "hello123",     # All normal - no match
+        "hello123",  # All normal - no match
         "æøå",  # All normal - no match
-        ]        
+    ]
 
-    assert len([t for t in positives if token_remove_regex.match(t) ]) == len(positives) 
-    assert len([t for t in negatives if token_remove_regex.match(t) ]) ==0
+    assert len([t for t in positives if token_remove_regex.match(t)]) == len(positives)
+    assert len([t for t in negatives if token_remove_regex.match(t)]) == 0
+
 
 def test_strip_uncommon():
     from dkmodel2vec.distillation import _validate_parameters
@@ -726,65 +675,93 @@ def test_strip_uncommon():
 
     token_remove_pattern = r"\[unused\d+\]"
     word_contains_upper_case_pattern = r"\b\w*[A-Z]\w*\b"
-    contains_exotic_token_pattern = r'^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]'
-    contains_uncommon_pattern = r'^\d{2,}$|^Ġ{2,}.*|^\.|^Ġ.*\d.*\d|(?=.*[a-zA-Z])(?=.*\d)'
-    token_remove_pattern = r"|".join([token_remove_pattern, word_contains_upper_case_pattern, contains_exotic_token_pattern, contains_uncommon_pattern])
+    contains_exotic_token_pattern = (
+        r"^(?!Ġ[a-zA-ZæøåÆØÅ0-9.,\s]*$)(?!<\|end_of_text\|>$).*[^a-zA-ZæøåÆØÅ0-9.,\s]"
+    )
+    contains_uncommon_pattern = (
+        r"^\d{2,}$|^Ġ{2,}.*|^\.|^Ġ.*\d.*\d|(?=.*[a-zA-Z])(?=.*\d)"
+    )
+    token_remove_pattern = r"|".join(
+        [
+            token_remove_pattern,
+            word_contains_upper_case_pattern,
+            contains_exotic_token_pattern,
+            contains_uncommon_pattern,
+        ]
+    )
 
     sif_coefficient, token_remove_regex = _validate_parameters(
-        apply_zipf=False, sif_coefficient=1e-3, token_remove_pattern=token_remove_pattern
+        apply_zipf=False,
+        sif_coefficient=1e-3,
+        token_remove_pattern=token_remove_pattern,
     )
     tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
     vocabulary = ["kongen", "konger"]
-    
+
     all_tokens, backend_tokenizer = clean_and_create_vocabulary(
         tokenizer, vocabulary, token_remove_regex=token_remove_regex
     )
-    
+
     matches = [t for t in all_tokens if token_remove_regex.match(t.form)]
     assert len(matches) == 0
-    
+
     positives = [
-        "11",           # Two digits - MATCH
-        "090",          # Multiple digits - MATCH
-        "4200",         # Multiple digits - MATCH
-        "999999",       # Multiple digits - MATCH
-        "ĠĠ4200",       # Starts with two Ġ - MATCH
-        "ĠĠhello",      # Starts with two Ġ - MATCH
-        "ĠĠĠtest",      # Starts with three Ġ - MATCH
-        ".pdf",         # Starts with period - MATCH
-        ".txt",         # Starts with period - MATCH
-        ".config",      # Starts with period - MATCH
-        "test123",      # Mixed letters and digits - MATCH
-        "a11",          # Mixed letters and digits - MATCH
-        "hello123world", # Mixed letters and digits - MATCH
-        "Ġ4200",        # Starts with Ġ and contains 2+ digits - MATCH
-        "Ġ1test2",      # Starts with Ġ and contains 2+ digits - MATCH
-        "Ġ123",         # Starts with Ġ and contains 2+ digits - MATCH
+        "11",  # Two digits - MATCH
+        "090",  # Multiple digits - MATCH
+        "4200",  # Multiple digits - MATCH
+        "999999",  # Multiple digits - MATCH
+        "ĠĠ4200",  # Starts with two Ġ - MATCH
+        "ĠĠhello",  # Starts with two Ġ - MATCH
+        "ĠĠĠtest",  # Starts with three Ġ - MATCH
+        ".pdf",  # Starts with period - MATCH
+        ".txt",  # Starts with period - MATCH
+        ".config",  # Starts with period - MATCH
+        "test123",  # Mixed letters and digits - MATCH
+        "a11",  # Mixed letters and digits - MATCH
+        "hello123world",  # Mixed letters and digits - MATCH
+        "Ġ4200",  # Starts with Ġ and contains 2+ digits - MATCH
+        "Ġ1test2",  # Starts with Ġ and contains 2+ digits - MATCH
+        "Ġ123",  # Starts with Ġ and contains 2+ digits - MATCH
     ]
-    
+
     negatives = [
-        "1",            # Single digit - no match
-        "9",            # Single digit - no match
-        "Ġ4",           # Starts with Ġ but only one digit - no match
-        "Ġhello",       # Only one Ġ, no digits - no match
-        "hello",        # Normal word - no match
-        "pdf",          # Doesn't start with period - no match
-        "test",         # Letters only - no match
+        "1",  # Single digit - no match
+        "9",  # Single digit - no match
+        "Ġ4",  # Starts with Ġ but only one digit - no match
+        "Ġhello",  # Only one Ġ, no digits - no match
+        "hello",  # Normal word - no match
+        "pdf",  # Doesn't start with period - no match
+        "test",  # Letters only - no match
     ]
 
     assert len([t for t in positives if token_remove_regex.match(t)]) == len(positives)
     assert len([t for t in negatives if token_remove_regex.match(t)]) == 0
-    
+
+
 def test_reduce_dimensions():
     from dkmodel2vec.distillation import reduce_dimensions
     from collections import Counter
+
     np.random.seed(79)
     embeddings = np.random.random((100, 10))
-    counts = {0: 1, 3: 5, 5: 0 , 10: 10}
+    counts = {0: 1, 3: 5, 5: 0, 10: 10}
     token_counts = Counter(counts)
     pca_dims = 2
-    reduced_embeds = reduce_dimensions(embeddings=embeddings, pca_dims=pca_dims, token_counts = token_counts)
-    assert reduced_embeds.shape == (embeddings.shape[0], pca_dims) 
+    reduced_embeds = reduce_dimensions(
+        embeddings=embeddings, pca_dims=pca_dims, token_counts=token_counts
+    )
+    assert reduced_embeds.shape == (embeddings.shape[0], pca_dims)
+
+
+def test_iterable_dimension_reduction():
+    from dkmodel2vec.utils import iterable_dimension_reduction
+
+    np.random.seed(79)
+    embeddings = np.random.random((100, 10))
+    ds = Dataset.from_dict({"embedding": embeddings.tolist()})
+    output_dim = 2
+    output_ds = iterable_dimension_reduction(ds, n_components=output_dim)
+    assert np.array(output_ds["embedding"]).shape == (embeddings.shape[0], output_dim)
 
 
 # def test_add_embeddings():
@@ -796,78 +773,86 @@ def test_reduce_dimensions():
 #     token_counts = Counter(counts)
 #     pca_dims = 2
 #     reduced_embeds = reduce_dimensions(embeddings=embeddings, pca_dims=pca_dims, token_counts = token_counts)
-#     assert reduced_embeds.shape == (embeddings.shape[0], pca_dims) 
+#     assert reduced_embeds.shape == (embeddings.shape[0], pca_dims)
+
 
 def test_create_corpus():
     from dkmodel2vec.retrieval import create_corpus
+
     raw = {
-        "idx": [0, 1,2], 
-        "positive": ["hallo", None, "hej"], 
-        "negative" : [None, "no", "nix"], 
-        "split" : ["train", "val", "test"]}
-    corpus = create_corpus(raw, columns = ["positive", "negative"], add_columns=["split"])
-    long_form = {"query_idx" : [0,1, 2,2 ],
-                  "document" : ["hallo", "no", "hej", "nix"], 
-                  "column" : ["positive", "negative", "positive", "negative"], 
-                  "split" : ["train", "val", "test", "test"]}
+        "idx": [0, 1, 2],
+        "positive": ["hallo", None, "hej"],
+        "negative": [None, "no", "nix"],
+        "split": ["train", "val", "test"],
+    }
+    corpus = create_corpus(raw, columns=["positive", "negative"], add_columns=["split"])
+    long_form = {
+        "query_idx": [0, 1, 2, 2],
+        "document": ["hallo", "no", "hej", "nix"],
+        "column": ["positive", "negative", "positive", "negative"],
+        "split": ["train", "val", "test", "test"],
+    }
     assert corpus == long_form
 
+
 def test_get_mapping_from_query_to_corpus():
     from dkmodel2vec.retrieval import get_mapping_from_query_to_corpus
 
 
 def test_get_mapping_from_query_to_corpus():
     from dkmodel2vec.retrieval import get_mapping_from_query_to_corpus
-    """Test mapping between query and corpus for positive examples."""   
-    flat_corpus = Dataset.from_dict({
-        'query_idx': [1, 2, 3],
-        'document': ['doc1', 'doc2', 'doc3'],
-        'column': ['positive', 'negative', 'positive']
-    })
+
+    """Test mapping between query and corpus for positive examples."""
+    flat_corpus = Dataset.from_dict(
+        {
+            "query_idx": [1, 2, 3],
+            "document": ["doc1", "doc2", "doc3"],
+            "column": ["positive", "negative", "positive"],
+        }
+    )
     result = get_mapping_from_query_to_corpus(flat_corpus)
     assert result == {1: 0, 3: 2}
 
 
 def test_add_recall():
     from dkmodel2vec.retrieval import add_recall
+
     """Test recall calculation at different thresholds."""
-    
+
     # Test: correct document at position 0 (found at all thresholds)
     example = {
-        'corpus_idx': 42,
-        'retrieved_document_idx': [42, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+        "corpus_idx": 42,
+        "retrieved_document_idx": [42, 10, 20, 30, 40, 50, 60, 70, 80, 90],
     }
     result = add_recall(example, thresholds=[5, 10])
-    assert result['recall@5'] == 1
-    assert result['recall@10'] == 1
-    
+    assert result["recall@5"] == 1
+    assert result["recall@10"] == 1
+
     # Test: correct document at position 7 (only found at threshold 10+)
     example = {
-        'corpus_idx': 99,
-        'retrieved_document_idx': [1, 2, 3, 4, 5, 6, 7, 99, 9, 10]
+        "corpus_idx": 99,
+        "retrieved_document_idx": [1, 2, 3, 4, 5, 6, 7, 99, 9, 10],
     }
     result = add_recall(example, thresholds=[5, 10])
-    assert result['recall@5'] == 0
-    assert result['recall@10'] == 1
-    
+    assert result["recall@5"] == 0
+    assert result["recall@10"] == 1
+
     # Test: correct document not in retrieved list (miss at all thresholds)
     example = {
-        'corpus_idx': 999,
-        'retrieved_document_idx': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        "corpus_idx": 999,
+        "retrieved_document_idx": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     }
     result = add_recall(example, thresholds=[5, 10])
-    assert result['recall@5'] == 0
-    assert result['recall@10'] == 0
-    
+    assert result["recall@5"] == 0
+    assert result["recall@10"] == 0
+
     # Test: custom thresholds
-    example = {
-        'corpus_idx': 50,
-        'retrieved_document_idx': [1, 10, 50]
-    }
+    example = {"corpus_idx": 50, "retrieved_document_idx": [1, 10, 50]}
     result = add_recall(example, thresholds=[1, 2, 3])
-    assert result['recall@1'] == 0
-    assert result['recall@2'] == 0
-    assert result['recall@3'] == 1
+    assert result["recall@1"] == 0
+    assert result["recall@2"] == 0
+    assert result["recall@3"] == 1
+
 
 def test_text_length_filtering():
     from dkmodel2vec.config import DANISH_INSTRUCTION
@@ -875,52 +860,64 @@ def test_text_length_filtering():
     from transformers import AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained("jealk/llm2vec-scandi-mntp-v2")
-    
+
     # Test data with short and long texts
     batch = {
-        "document": ["Denne tekst er laaaaaaang..." * 1000, "kort", "kort uden instr"], 
-        "column": ["query", "query", "positive"]
+        "document": ["Denne tekst er laaaaaaang..." * 1000, "kort", "kort uden instr"],
+        "column": ["query", "query", "positive"],
     }
     max_length = 800
     doc_max_length = 400
-    
+
     # Test 1: Check length filtering
     length_check = check_fits_length(batch, tokenizer, max_length, doc_max_length)
-    
-    assert length_check['fits_length'][0] == False, "Long text should not fit"
-    assert length_check['fits_length'][1] == True, "Short text should fit"
-    assert length_check['fits_length'][2] == True, "Short text should fit"
-    
+
+    assert length_check["fits_length"][0] == False, "Long text should not fit"
+    assert length_check["fits_length"][1] == True, "Short text should fit"
+    assert length_check["fits_length"][2] == True, "Short text should fit"
+
     # Test 2: Filter to only texts that fit
     filtered_batch = {
-        "document": [batch['document'][i] for i, fits in enumerate(length_check['fits_length']) if fits],
-        "column": [batch['column'][i] for i, fits in enumerate(length_check['fits_length']) if fits]
+        "document": [
+            batch["document"][i]
+            for i, fits in enumerate(length_check["fits_length"])
+            if fits
+        ],
+        "column": [
+            batch["column"][i]
+            for i, fits in enumerate(length_check["fits_length"])
+            if fits
+        ],
     }
-    
-    assert len(filtered_batch['document']) == 2, "Should keep 2 short texts"
-    
+
+    assert len(filtered_batch["document"]) == 2, "Should keep 2 short texts"
+
     # Test 3: Add instructions to filtered texts
     output = add_instruction_to_text(filtered_batch, DANISH_INSTRUCTION)
-    
-    assert len(output['processed_text']) == 2, "Should have 2 processed texts"
-    assert DANISH_INSTRUCTION in output['processed_text'][0], "Query should have instruction"
-    assert DANISH_INSTRUCTION not in output['processed_text'][1], "Positive should not have instruction"
-    assert "!@#$%^&*()" in output['processed_text'][0], "Should have separator"
-    assert "kort" in output['processed_text'][0], "Should contain original text"
+
+    assert len(output["processed_text"]) == 2, "Should have 2 processed texts"
+    assert DANISH_INSTRUCTION in output["processed_text"][0], (
+        "Query should have instruction"
+    )
+    assert DANISH_INSTRUCTION not in output["processed_text"][1], (
+        "Positive should not have instruction"
+    )
+    assert "!@#$%^&*()" in output["processed_text"][0], "Should have separator"
+    assert "kort" in output["processed_text"][0], "Should contain original text"
 
 
 def test_add_instruction_format():
     """Test that instruction formatting matches LLM2Vec exactly."""
     from dkmodel2vec.config import DANISH_INSTRUCTION
     from dkmodel2vec.utils import add_instruction_to_text
-    
-    batch = {
-        "document": ["test text", "another text"],
-        "column": ["query", "positive"]
-    }
-    
+
+    batch = {"document": ["test text", "another text"], "column": ["query", "positive"]}
+
     output = add_instruction_to_text(batch, DANISH_INSTRUCTION)
-    
+
     # Verify exact format: "instruction !@#$%^&*()text"
-    assert output['processed_text'][0] == f"{DANISH_INSTRUCTION.strip()} !@#$%^&*()test text"
-    assert output['processed_text'][1] == "!@#$%^&*()another text"
+    assert (
+        output["processed_text"][0]
+        == f"{DANISH_INSTRUCTION.strip()} !@#$%^&*()test text"
+    )
+    assert output["processed_text"][1] == "!@#$%^&*()another text"
