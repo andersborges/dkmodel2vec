@@ -12,6 +12,7 @@ The code heavily relies on the packages model2vec, tokenlearn and LLM2vec.
 - Compare performance to simple BM25 encoder and a 'good' Sentence Transformer
 - Allows finetuning with tokenlearn with query, positive and negative examples
 - Assess performance of retriever, hybrid retrieval with BM25 and two-stage hybrid retrieval with a reranker
+- Visualize embeddings as sum of contributions
 
 ## Installation
 
@@ -70,6 +71,17 @@ You can assess the retrieval performance of the model with:
 ```bash 
 uv run python scripts/retrieval.py --model <path-to-your-fine-tuned-model>
 ```
+
+### Interpreting embeddings
+```python 
+m2v = StaticModel.from_pretrained("andersborges/model2vecdk")
+
+# Create visualizer
+viz = TokenEmbeddingVisualizer(model=m2v)
+texts = ["Elefanten har et lang næse", "Elefanten bruger sin lange næse","Næsen på elefanten er stor"]
+viz.visualize(texts)
+```
+
 
 ### Advanced Usage
 You can modify the training script to work for your own data and LLM2Vec model. Look in the the ```dkmodel2vec.load_data.py``` and ```dkmodel2vec.data_loader.py``` files. 
