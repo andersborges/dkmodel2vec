@@ -1,0 +1,1 @@
+seb run -l da -m sentence-transformers/all-MiniLM-L6-v2

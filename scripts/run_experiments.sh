@@ -82,7 +82,15 @@ echo ""
 #python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --focus-pca --normalize-embeddings --vocab-size 150000 --full-dataset --stem
 
 # train small model while stripping uncommon tokens and only 50k tokens
-python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --strip-uncommon --focus-pca --normalize-embeddings --stem --vocab-size 50000 
+#python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --strip-uncommon --focus-pca --normalize-embeddings --stem --vocab-size 50000 
+
+# train larger model while stripping uncommon tokens
+#python scripts/hyperparams.py --output-dim 256 --sif-coefficient 0.0005 --strip-upper-case --strip-exotic --strip-uncommon --focus-pca --normalize-embeddings --stem --vocab-size 150000 
+
+
+# vanilla model with as many stripped tokens as possible
+#python scripts/hyperparams.py --output-dim 256  --strip-upper-case --strip-exotic --strip-uncommon 
+#python scripts/hyperparams.py --output-dim 256  --strip-upper-case --strip-exotic --strip-uncommon --ignore-external-tokens
 
 echo ""
 echo "======================================"
